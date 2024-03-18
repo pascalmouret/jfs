@@ -9,11 +9,17 @@ pub struct SuperBlock {
     pub magic: u32,
     pub block_size: usize,
     pub block_count: u64,
+    pub inode_count: u64,
 }
 
 impl SuperBlock {
     pub fn new(block_size: usize, block_count: u64) -> SuperBlock {
-        SuperBlock { magic: MAGIC, block_size, block_count }
+        SuperBlock { magic: MAGIC, block_size, block_count, inode_count: 0 }
+    }
+
+    pub fn set_inode_count(&mut self, fsio: &FSIO, inode_count: u64) {
+        self.inode_count = inode_count;
+        self.write(fsio);
     }
 
     // note: we can't use block reading since we don't know the block size yet
@@ -39,7 +45,8 @@ impl SuperBlock {
         let magic = u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
         let block_size = u32::from_le_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]) as usize;
         let block_count = u64::from_le_bytes([buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15]]);
-        SuperBlock { magic, block_size, block_count }
+        let inode_count = u64::from_le_bytes([buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31]]);
+        SuperBlock { magic, block_size, block_count, inode_count }
     }
 
     fn to_buffer(&self) -> Vec<u8> {
@@ -47,6 +54,7 @@ impl SuperBlock {
         buffer.extend_from_slice(&self.magic.to_le_bytes());
         buffer.extend_from_slice(&(self.block_size as u32).to_le_bytes());
         buffer.extend_from_slice(&self.block_count.to_le_bytes());
+        buffer.extend_from_slice(&self.inode_count.to_le_bytes());
         buffer
     }
 

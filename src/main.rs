@@ -1,3 +1,5 @@
+extern crate core;
+
 mod emu;
 mod fs;
 mod superblock;

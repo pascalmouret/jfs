@@ -1,8 +1,8 @@
 use crate::fs::FSIO;
 
 pub struct BlockMap {
-    first_block: u64,
-    last_block: u64,
+    pub(crate) first_block: u64,
+    pub(crate) last_block: u64,
     data: Vec<u8>,
 }
 
@@ -82,7 +82,7 @@ impl BlockMap {
         self.data[byte_index] |= 1 << bit_index;
     }
 
-    fn mark_used(&mut self, fsio: &FSIO, index: u64) {
+    pub(crate) fn mark_used(&mut self, fsio: &FSIO, index: u64) {
         self.mark_used_mem(index);
         self.write_part(fsio, index);
     }
@@ -93,7 +93,7 @@ impl BlockMap {
         self.data[byte_index] &= !(1 << bit_index);
     }
 
-    fn mark_free(&mut self, fsio: &FSIO, index: u64) {
+    pub(crate) fn mark_free(&mut self, fsio: &FSIO, index: u64) {
         self.mark_free_mem(index);
         self.write_part(fsio, index);
     }

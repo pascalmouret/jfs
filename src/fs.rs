@@ -1,6 +1,7 @@
 use crate::blockmap::BlockMap;
 use crate::consts::SUPERBLOCK_SIZE;
 use crate::emu::HardDrive;
+use crate::inode::InodeTable;
 use crate::raw::{raw_read_block, raw_write_block};
 use crate::superblock::SuperBlock;
 
@@ -41,6 +42,7 @@ pub struct FS {
     fsio: FSIO,
     pub(crate) superblock: SuperBlock,
     blockmap: BlockMap,
+    inode_table: InodeTable,
 }
 
 impl FS {
@@ -54,10 +56,18 @@ impl FS {
         }
 
         let fsio = FSIO::new(drive, block_size);
-        let superblock = SuperBlock::new(block_size, fsio.drive.bytes / block_size as u64);
+        let mut superblock = SuperBlock::new(block_size, fsio.drive.bytes / block_size as u64);
         superblock.write(&fsio);
-        let blockmap = BlockMap::new((SUPERBLOCK_SIZE / fsio.block_size) as u64, superblock.block_count, block_size);
+
+        let mut blockmap = BlockMap::new((SUPERBLOCK_SIZE / fsio.block_size) as u64, superblock.block_count, block_size);
         blockmap.write_full(&fsio);
+
+        let inode_index = blockmap.last_block + 1;
+        let inode_table = InodeTable::create(inode_index, &fsio);
+        for i in 0..inode_table.block_count {
+            blockmap.mark_used(&fsio, inode_index + i as u64);
+        }
+        superblock.set_inode_count(&fsio, inode_table.inode_count);
 
         FS::mount(fsio.drive)
     }
@@ -66,8 +76,9 @@ impl FS {
         match SuperBlock::read(&drive) {
             Some(superblock) => {
                 let fsio = FSIO::new(drive, superblock.block_size);
-                let blockmap = BlockMap::read(&fsio, 1);
-                FS { fsio, superblock, blockmap }
+                let blockmap = BlockMap::read(&fsio, (SUPERBLOCK_SIZE / fsio.block_size) as u64);
+                let inode_table = InodeTable::read(&fsio, blockmap.last_block + 1, superblock.inode_count);
+                FS { fsio, superblock, blockmap, inode_table }
             }
             None => panic!("No superblock found"),
         }
