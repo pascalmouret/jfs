@@ -1,7 +1,7 @@
 use crate::blockmap::BlockMap;
-use crate::consts::SUPERBLOCK_SIZE;
+use crate::consts::{BlockPointer, SUPERBLOCK_SIZE};
 use crate::emu::HardDrive;
-use crate::inode::InodeTable;
+use crate::inode_table::InodeTable;
 use crate::raw::{raw_read_block, raw_write_block};
 use crate::superblock::SuperBlock;
 
@@ -17,7 +17,7 @@ impl FSIO {
         FSIO { drive, block_size, block_count }
     }
 
-    pub(crate) fn write_block(&self, index: u64, block: &Vec<u8>) {
+    pub(crate) fn write_block(&self, index: BlockPointer, block: &Vec<u8>) {
         if block.len() != self.block_size {
             panic!("Block size mismatch");
         }
@@ -29,7 +29,7 @@ impl FSIO {
         raw_write_block(&self.drive, self.block_size, block, index);
     }
 
-    pub(crate) fn read_block(&self, index: u64) -> Vec<u8> {
+    pub(crate) fn read_block(&self, index: BlockPointer) -> Vec<u8> {
         if index >= self.block_count {
             panic!("Block index out of range");
         }
@@ -84,11 +84,11 @@ impl FS {
         }
     }
 
-    pub(crate) fn write_block(&self, index: u64, block: &Vec<u8>) {
+    pub(crate) fn write_block(&self, index: BlockPointer, block: &Vec<u8>) {
         self.fsio.write_block(index, block)
     }
 
-    pub(crate) fn read_block(&self, index: u64) -> Vec<u8> {
+    pub(crate) fn read_block(&self, index: BlockPointer) -> Vec<u8> {
         self.fsio.read_block(index)
     }
 }

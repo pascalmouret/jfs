@@ -6,6 +6,7 @@ mod superblock;
 mod consts;
 mod raw;
 mod blockmap;
+mod inode_table;
 mod inode;
 
 const DRIVE_SIZE: u64 = 10 * 1024 * 1024;

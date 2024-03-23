@@ -1,13 +1,14 @@
+use crate::consts::BlockPointer;
 use crate::fs::FSIO;
 
 pub struct BlockMap {
-    pub(crate) first_block: u64,
-    pub(crate) last_block: u64,
+    pub(crate) first_block: BlockPointer,
+    pub(crate) last_block: BlockPointer,
     data: Vec<u8>,
 }
 
 impl BlockMap {
-    pub fn new(first_block: u64, block_count: u64, block_size: usize) -> BlockMap {
+    pub fn new(first_block: BlockPointer, block_count: u64, block_size: usize) -> BlockMap {
         let data = BlockMap::create_data(block_count, block_size);
         let last_block = first_block + data.len() as u64 / block_size as u64;
         let mut map = BlockMap { first_block, last_block, data };
@@ -17,7 +18,7 @@ impl BlockMap {
         map
     }
 
-    pub fn read(fsio: &FSIO, index: u64) -> BlockMap {
+    pub fn read(fsio: &FSIO, index: BlockPointer) -> BlockMap {
         let mut data = BlockMap::create_data(fsio.block_count, fsio.block_size);
         let last_block = index + data.len() as u64 / fsio.block_size as u64;
         for i in index..last_block {
@@ -40,7 +41,7 @@ impl BlockMap {
         data
     }
 
-    pub fn write_part(&self, fsio: &FSIO, including_index: u64) {
+    pub fn write_part(&self, fsio: &FSIO, including_index: BlockPointer) {
         let block = (including_index / fsio.block_size as u64 / 8) as usize;
         let data = &self.data[block * fsio.block_size..(block + 1) * fsio.block_size];
         fsio.write_block(self.first_block + block as u64, &data.to_vec());
@@ -68,32 +69,32 @@ impl BlockMap {
         None
     }
 
-    fn is_free(&self, index: u64) -> bool {
+    fn is_free(&self, index: BlockPointer) -> bool {
         self.data[(index / 8) as usize] & (1 << (index % 8)) == 0
     }
 
-    fn is_used(&self, index: u64) -> bool {
+    fn is_used(&self, index: BlockPointer) -> bool {
         !self.is_free(index)
     }
 
-    fn mark_used_mem(&mut self, index: u64) {
+    fn mark_used_mem(&mut self, index: BlockPointer) {
         let byte_index = (index / 8) as usize;
         let bit_index = (index % 8) as usize;
         self.data[byte_index] |= 1 << bit_index;
     }
 
-    pub(crate) fn mark_used(&mut self, fsio: &FSIO, index: u64) {
+    pub(crate) fn mark_used(&mut self, fsio: &FSIO, index: BlockPointer) {
         self.mark_used_mem(index);
         self.write_part(fsio, index);
     }
 
-    fn mark_free_mem(&mut self, index: u64) {
+    fn mark_free_mem(&mut self, index: BlockPointer) {
         let byte_index = (index / 8) as usize;
         let bit_index = (index % 8) as usize;
         self.data[byte_index] &= !(1 << bit_index);
     }
 
-    pub(crate) fn mark_free(&mut self, fsio: &FSIO, index: u64) {
+    pub(crate) fn mark_free(&mut self, fsio: &FSIO, index: BlockPointer) {
         self.mark_free_mem(index);
         self.write_part(fsio, index);
     }

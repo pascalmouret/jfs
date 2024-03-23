@@ -1,7 +1,8 @@
 use std::ops::Range;
+use crate::consts::BlockPointer;
 use crate::emu::HardDrive;
 
-pub(crate) fn raw_write_block(drive: &HardDrive, block_size: usize, data: &Vec<u8>, index: u64) {
+pub(crate) fn raw_write_block(drive: &HardDrive, block_size: usize, data: &Vec<u8>, index: BlockPointer) {
     if block_size == drive.sector_size {
         drive.write_sector(index, data);
     } else {
@@ -18,7 +19,7 @@ pub(crate) fn raw_write_block(drive: &HardDrive, block_size: usize, data: &Vec<u
     }
 }
 
-pub(crate) fn raw_read_block(drive: &HardDrive, block_size: usize, index: u64) -> Vec<u8> {
+pub(crate) fn raw_read_block(drive: &HardDrive, block_size: usize, index: BlockPointer) -> Vec<u8> {
     if block_size == drive.sector_size {
         drive.read_sector(index)
     } else {
