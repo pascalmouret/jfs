@@ -1,5 +1,5 @@
 use crate::consts::BlockPointer;
-use crate::fs::FSIO;
+use crate::fsio::FSIO;
 
 pub struct BlockMap {
     pub(crate) first_block: BlockPointer,
@@ -103,7 +103,7 @@ impl BlockMap {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use crate::fs::FSIO;
+    use crate::fsio::FSIO;
     use crate::emu::HardDrive;
 
     #[test]

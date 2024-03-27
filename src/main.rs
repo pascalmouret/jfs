@@ -8,6 +8,7 @@ mod raw;
 mod blockmap;
 mod inode_table;
 mod inode;
+mod fsio;
 
 const DRIVE_SIZE: u64 = 10 * 1024 * 1024;
 

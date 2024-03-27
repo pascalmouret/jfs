@@ -1,6 +1,6 @@
 use std::mem::size_of;
 use crate::consts::{BlockPointer, BLOCKS_PER_INODE_MAP, DirectPointers, InodePointer};
-use crate::fs::FSIO;
+use crate::fsio::FSIO;
 use crate::inode::{Inode, InodeKind};
 
 
@@ -144,7 +144,7 @@ impl InodeTable {
 mod tests {
     use std::fs;
     use crate::emu::HardDrive;
-    use crate::fs::{FSIO};
+    use crate::fsio::{FSIO};
 
     #[test]
     fn read_write_table() {

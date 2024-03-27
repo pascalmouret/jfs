@@ -1,6 +1,6 @@
 use crate::consts::SUPERBLOCK_SIZE;
 use crate::emu::HardDrive;
-use crate::fs::FSIO;
+use crate::fsio::FSIO;
 
 const MAGIC: u32 = 0xdeadbeef;
 

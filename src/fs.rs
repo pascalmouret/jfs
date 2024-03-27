@@ -1,42 +1,9 @@
 use crate::blockmap::BlockMap;
 use crate::consts::{BlockPointer, SUPERBLOCK_SIZE};
 use crate::emu::HardDrive;
+use crate::fsio::FSIO;
 use crate::inode_table::InodeTable;
-use crate::raw::{raw_read_block, raw_write_block};
 use crate::superblock::SuperBlock;
-
-pub(crate) struct FSIO {
-    pub(crate) drive: HardDrive,
-    pub block_size: usize,
-    pub block_count: u64,
-}
-
-impl FSIO {
-    pub fn new(drive: HardDrive, block_size: usize) -> FSIO {
-        let block_count = drive.bytes / block_size as u64;
-        FSIO { drive, block_size, block_count }
-    }
-
-    pub(crate) fn write_block(&self, index: BlockPointer, block: &Vec<u8>) {
-        if block.len() != self.block_size {
-            panic!("Block size mismatch");
-        }
-
-        if index >= self.block_count {
-            panic!("Block index out of range");
-        }
-
-        raw_write_block(&self.drive, self.block_size, block, index);
-    }
-
-    pub(crate) fn read_block(&self, index: BlockPointer) -> Vec<u8> {
-        if index >= self.block_count {
-            panic!("Block index out of range");
-        }
-
-        raw_read_block(&self.drive, self.block_size, index)
-    }
-}
 
 pub struct FS {
     fsio: FSIO,
@@ -83,14 +50,6 @@ impl FS {
             None => panic!("No superblock found"),
         }
     }
-
-    pub(crate) fn write_block(&self, index: BlockPointer, block: &Vec<u8>) {
-        self.fsio.write_block(index, block)
-    }
-
-    pub(crate) fn read_block(&self, index: BlockPointer) -> Vec<u8> {
-        self.fsio.read_block(index)
-    }
 }
 
 #[cfg(test)]
@@ -107,26 +66,5 @@ mod tests {
             assert_eq!(fs.superblock, SuperBlock::new(512, 1024));
         }
         fs::remove_file("fs_init.img").unwrap();
-    }
-
-    #[test]
-    fn read_write_large_block() {
-        {
-            let drive = HardDrive::new("fs_read_write_block.img", 1024 * 512, 512);
-            let fs = super::FS::new(drive, 1024);
-
-            let block1 = vec![0x42; 1024];
-            fs.write_block(3, &block1);
-            assert_eq!(fs.read_block(3), block1);
-
-            let block2 = vec![0x1; 1024];
-            fs.write_block(4, &block2);
-            assert_eq!(fs.read_block(4), block2);
-
-            let block3 = vec![0x8; 1024];
-            fs.write_block(3, &block3);
-            assert_eq!(fs.read_block(3), block3);
-        }
-        fs::remove_file("fs_read_write_block.img").unwrap();
     }
 }
