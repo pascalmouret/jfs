@@ -45,7 +45,7 @@ impl SuperBlock {
         let magic = u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
         let block_size = u32::from_le_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]) as usize;
         let block_count = u64::from_le_bytes([buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15]]);
-        let inode_count = u64::from_le_bytes([buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31]]);
+        let inode_count = u64::from_le_bytes([buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23]]);
         SuperBlock { magic, block_size, block_count, inode_count }
     }
 

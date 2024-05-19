@@ -1,8 +1,9 @@
 use std::mem::size_of;
-use crate::consts::{BlockPointer, BLOCKS_PER_INODE_MAP, DirectPointers, InodePointer};
+use crate::consts::{BlockPointer, BLOCKS_PER_INODE_MAP, DIRECT_POINTERS, DirectPointers, InodePointer};
 use crate::fsio::FSIO;
 use crate::inode::{Inode, InodeKind};
 
+const EMPTY_POINTERS: DirectPointers = [0 as BlockPointer; DIRECT_POINTERS];
 
 pub struct InodeTable {
     map: Vec<u8>,
@@ -40,9 +41,9 @@ impl InodeTable {
         InodeTable { map, map_index: index, inode_count, table_index: index + map_blocks, block_count: total_blocks as usize }
     }
 
-    pub fn create_inode(&mut self, fsio: &FSIO, tpe: InodeKind, pointers: DirectPointers) -> Inode {
+    pub fn create_inode(&mut self, fsio: &FSIO, tpe: InodeKind) -> Inode {
         let index = self.allocate(fsio).unwrap();
-        let inode = Inode::new(tpe, index, pointers);
+        let inode = Inode::new(tpe, index, EMPTY_POINTERS);
         self.write_inode(fsio, inode);
         inode
     }

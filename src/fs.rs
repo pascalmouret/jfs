@@ -1,15 +1,16 @@
 use crate::blockmap::BlockMap;
-use crate::consts::{BlockPointer, SUPERBLOCK_SIZE};
+use crate::consts::{SUPERBLOCK_SIZE};
+use crate::directory::Directory;
 use crate::emu::HardDrive;
 use crate::fsio::FSIO;
 use crate::inode_table::InodeTable;
 use crate::superblock::SuperBlock;
 
 pub struct FS {
-    fsio: FSIO,
+    pub(crate) fsio: FSIO,
     pub(crate) superblock: SuperBlock,
-    blockmap: BlockMap,
-    inode_table: InodeTable,
+    pub(crate) blockmap: BlockMap,
+    pub(crate) inode_table: InodeTable,
 }
 
 impl FS {
@@ -49,6 +50,10 @@ impl FS {
             }
             None => panic!("No superblock found"),
         }
+    }
+
+    pub fn create_dir(&'static mut self) -> Directory {
+        Directory::create(self)
     }
 }
 

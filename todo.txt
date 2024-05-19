@@ -1,0 +1,5 @@
+- Files
+- Directories
+- Indirect pointers
+- Permissions
+- Dates
