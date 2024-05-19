@@ -148,43 +148,38 @@ mod tests {
 
     #[test]
     fn read_write_table() {
-        {
-            let drive = HardDrive::new("inode_read_write_table.img", 2048 * 512, 512);
-            let fsio = FSIO::new(drive, 512);
+        let drive = HardDrive::new("./test-images/inode_read_write_table.img", 2048 * 512, 512);
+        let fsio = FSIO::new(drive, 512);
 
-            let new_table = super::InodeTable::create(1, &fsio);
-            assert_eq!(new_table.map.len(), 512);
-            assert_eq!(new_table.map_index, 1);
-            assert_eq!(new_table.inode_count, 512 * 8);
-            assert_eq!(new_table.table_index, 2);
-            assert_eq!(new_table.block_count, 1025);
+        let new_table = super::InodeTable::create(1, &fsio);
+        assert_eq!(new_table.map.len(), 512);
+        assert_eq!(new_table.map_index, 1);
+        assert_eq!(new_table.inode_count, 512 * 8);
+        assert_eq!(new_table.table_index, 2);
+        assert_eq!(new_table.block_count, 1025);
 
-            let inode_table = super::InodeTable::read(&fsio, 1, new_table.inode_count);
-            assert_eq!(inode_table.map.len(), 512);
-            assert_eq!(inode_table.map_index, 1);
-            assert_eq!(inode_table.inode_count, 512 * 8);
-            assert_eq!(inode_table.table_index, 2);
-            assert_eq!(inode_table.block_count, 1025);
-        }
-        fs::remove_file("inode_read_write_table.img").unwrap();
+        let inode_table = super::InodeTable::read(&fsio, 1, new_table.inode_count);
+        assert_eq!(inode_table.map.len(), 512);
+        assert_eq!(inode_table.map_index, 1);
+        assert_eq!(inode_table.inode_count, 512 * 8);
+        assert_eq!(inode_table.table_index, 2);
+        assert_eq!(inode_table.block_count, 1025);
     }
 
     #[test]
     fn read_write_inode() {
-        {
-            let drive = HardDrive::new("inode_read_write_node.img", 2048 * 512, 512);
-            let fsio = FSIO::new(drive, 512);
+        let drive = HardDrive::new("./test-images/inode_read_write_node.img", 2048 * 512, 512);
+        let fsio = FSIO::new(drive, 512);
 
-            let mut inode_table = super::InodeTable::create(1, &fsio);
-            let mut memory_inode = inode_table.create_inode(&fsio, super::InodeKind::File, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
-            let mut fs_inode = inode_table.read_inode(&fsio, 0);
-            assert_eq!(memory_inode.to_bytes(), fs_inode.to_bytes());
+        let mut inode_table = super::InodeTable::create(1, &fsio);
+        let mut memory_inode = inode_table.create_inode(&fsio, super::InodeKind::File);
+        let mut fs_inode = inode_table.read_inode(&fsio, 0);
+        assert_eq!(memory_inode.to_bytes(), fs_inode.to_bytes());
 
-            memory_inode.kind = super::InodeKind::Directory;
-            inode_table.write_inode(&fsio, memory_inode);
-            fs_inode = inode_table.read_inode(&fsio, memory_inode.id);
-            assert_eq!(memory_inode.to_bytes(), fs_inode.to_bytes());
-        }
-        fs::remove_file("inode_read_write_node.img").unwrap();
+        memory_inode.kind = super::InodeKind::Directory;
+        memory_inode.set_pointers([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+        inode_table.write_inode(&fsio, memory_inode);
+        fs_inode = inode_table.read_inode(&fsio, memory_inode.id);
+        assert_eq!(memory_inode.to_bytes(), fs_inode.to_bytes());
     }
 }

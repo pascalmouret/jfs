@@ -67,18 +67,13 @@ impl SuperBlock {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     #[test]
     fn read_write_superblock() {
-        {
-            let drive = super::HardDrive::new("test_superblock.img", 1024 * 512, 512);
-            let fsio = super::FSIO::new(drive, 512);
-            let superblock = super::SuperBlock::new(512, 1024);
-            superblock.write(&fsio);
-            let drive_superblock = super::SuperBlock::read(&fsio.drive).unwrap();
-            assert_eq!(superblock, drive_superblock);
-        }
-        fs::remove_file("test_superblock.img").unwrap();
+        let drive = super::HardDrive::new("./test-images/test_superblock.img", 1024 * 512, 512);
+        let fsio = super::FSIO::new(drive, 512);
+        let superblock = super::SuperBlock::new(512, 1024);
+        superblock.write(&fsio);
+        let drive_superblock = super::SuperBlock::read(&fsio.drive).unwrap();
+        assert_eq!(superblock, drive_superblock);
     }
 }

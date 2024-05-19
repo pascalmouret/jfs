@@ -108,28 +108,22 @@ mod tests {
 
     #[test]
     fn read_write() {
-        {
-            let drive = HardDrive::new("blockmap_read_write.img", 1024 * 512, 512);
-            let fsio = FSIO::new(drive, 1024);
-            let blockmap = super::BlockMap::new(1, 1024, 1024);
-            blockmap.write_full(&fsio);
-            assert_eq!(blockmap.data, super::BlockMap::read(&fsio, 1).data)
-        }
-        fs::remove_file("blockmap_read_write.img").unwrap();
+        let drive = HardDrive::new("./test-images/blockmap_read_write.img", 1024 * 512, 512);
+        let fsio = FSIO::new(drive, 1024);
+        let blockmap = super::BlockMap::new(1, 1024, 1024);
+        blockmap.write_full(&fsio);
+        assert_eq!(blockmap.data, super::BlockMap::read(&fsio, 1).data)
     }
 
     #[test]
     fn allocate() {
-        {
-            let drive = HardDrive::new("blockmap_allocate.img", 1024 * 512, 512);
-            let fsio = FSIO::new(drive, 1024);
-            let mut blockmap = super::BlockMap::new(1, 1024, 1024);
-            let index = blockmap.allocate(&fsio).unwrap();
-            assert_eq!(blockmap.is_used(index), true);
-            blockmap.mark_free(&fsio, index);
-            assert_eq!(blockmap.is_free(index), true);
-            assert_eq!(blockmap.data, super::BlockMap::read(&fsio, 1).data)
-        }
-        fs::remove_file("blockmap_allocate.img").unwrap();
+        let drive = HardDrive::new("./test-images/blockmap_allocate.img", 1024 * 512, 512);
+        let fsio = FSIO::new(drive, 1024);
+        let mut blockmap = super::BlockMap::new(1, 1024, 1024);
+        let index = blockmap.allocate(&fsio).unwrap();
+        assert_eq!(blockmap.is_used(index), true);
+        blockmap.mark_free(&fsio, index);
+        assert_eq!(blockmap.is_free(index), true);
+        assert_eq!(blockmap.data, super::BlockMap::read(&fsio, 1).data)
     }
 }

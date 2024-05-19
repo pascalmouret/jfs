@@ -37,42 +37,35 @@ impl FSIO {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use crate::emu::HardDrive;
 
     #[test]
     fn read_write() {
-        {
-            let drive = HardDrive::new("fsio_read_write.img", 1024 * 512, 1024);
-            let fsio = super::FSIO::new(drive, 1024);
+        let drive = HardDrive::new("./test-images/fsio_read_write.img", 1024 * 512, 1024);
+        let fsio = super::FSIO::new(drive, 1024);
 
-            let block = vec![42; 1024];
-            fsio.write_block(0, &block);
-            let read = fsio.read_block(0);
+        let block = vec![42; 1024];
+        fsio.write_block(0, &block);
+        let read = fsio.read_block(0);
 
-            assert_eq!(block, read);
-        }
-        fs::remove_file("fsio_read_write.img").unwrap();
+        assert_eq!(block, read);
     }
 
     #[test]
     fn read_write_large_block() {
-        {
-            let drive = HardDrive::new("fsio_large_block.img", 1024 * 512, 512);
-            let fs = super::FSIO::new(drive, 1024);
+        let drive = HardDrive::new("./test-images/fsio_large_block.img", 1024 * 512, 512);
+        let fs = super::FSIO::new(drive, 1024);
 
-            let block1 = vec![0x42; 1024];
-            fs.write_block(3, &block1);
-            assert_eq!(fs.read_block(3), block1);
+        let block1 = vec![0x42; 1024];
+        fs.write_block(3, &block1);
+        assert_eq!(fs.read_block(3), block1);
 
-            let block2 = vec![0x1; 1024];
-            fs.write_block(4, &block2);
-            assert_eq!(fs.read_block(4), block2);
+        let block2 = vec![0x1; 1024];
+        fs.write_block(4, &block2);
+        assert_eq!(fs.read_block(4), block2);
 
-            let block3 = vec![0x8; 1024];
-            fs.write_block(3, &block3);
-            assert_eq!(fs.read_block(3), block3);
-        }
-        fs::remove_file("fsio_large_block.img").unwrap();
+        let block3 = vec![0x8; 1024];
+        fs.write_block(3, &block3);
+        assert_eq!(fs.read_block(3), block3);
     }
 }
