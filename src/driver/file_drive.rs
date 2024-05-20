@@ -1,32 +1,43 @@
 use std::fs::File;
 use std::os::unix::fs::FileExt;
+use crate::driver::DeviceDriver;
 
-pub struct HardDrive {
+pub struct FileDrive {
     file: File,
     pub bytes: u64,
     pub sector_size: usize,
 }
 
-impl HardDrive {
-    pub fn new(name: &str, bytes: u64, sector_size: usize) -> HardDrive {
+impl FileDrive {
+    pub fn new(name: &str, bytes: u64, sector_size: usize) -> FileDrive {
         let file = File::create_new(name).unwrap();
         file.set_len(bytes).unwrap();
-        HardDrive { file, bytes, sector_size }
+        FileDrive { file, bytes, sector_size }
     }
 
-    pub fn open(name: &str, sector_size: usize) -> HardDrive {
+    pub fn open(name: &str, sector_size: usize) -> FileDrive {
         let file = File::open(name).unwrap();
         let bytes = file.metadata().unwrap().len();
-        HardDrive { file, bytes, sector_size }
+        FileDrive { file, bytes, sector_size }
+    }
+}
+
+impl DeviceDriver for FileDrive {
+    fn get_size(&self) -> u64 {
+        self.bytes
     }
 
-    pub fn read_sector(&self, index: u64) -> Vec<u8> {
+    fn get_sector_size(&self) -> usize {
+        self.sector_size
+    }
+
+    fn read_sector(&self, index: u64) -> Vec<u8> {
         let mut buffer = vec![0; self.sector_size];
         self.file.read_at(&mut buffer, index * self.sector_size as u64).unwrap();
         buffer
     }
 
-    pub fn write_sector(&self, index: u64, sector: &Vec<u8>) {
+    fn write_sector(&mut self, index: u64, sector: &Vec<u8>) {
         if sector.len() != self.sector_size {
             panic!("Sector size mismatch - expected {}, got {}", self.sector_size, sector.len());
         }
@@ -36,11 +47,12 @@ impl HardDrive {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use crate::driver::DeviceDriver;
+    use crate::driver::file_drive::FileDrive;
 
     #[test]
     fn test_hard_drive() {
-        let drive = super::HardDrive::new("./test-images/test_drive.img", 1024 * 512, 512);
+        let mut drive = FileDrive::new("./test-images/test_drive.img", 1024 * 512, 512);
 
         let sector0 = vec![0x42; 512];
         let sector1 = vec![0x1; 512];

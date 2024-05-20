@@ -1,6 +1,6 @@
 use crate::consts::SUPERBLOCK_SIZE;
-use crate::emu::HardDrive;
-use crate::fsio::FSIO;
+use crate::driver::DeviceDriver;
+use crate::io::IO;
 
 const MAGIC: u32 = 0xdeadbeef;
 
@@ -17,23 +17,23 @@ impl SuperBlock {
         SuperBlock { magic: MAGIC, block_size, block_count, inode_count: 0 }
     }
 
-    pub fn set_inode_count(&mut self, fsio: &FSIO, inode_count: u64) {
+    pub fn set_inode_count<A: DeviceDriver>(&mut self, io: &mut IO<A>, inode_count: u64) {
         self.inode_count = inode_count;
-        self.write(fsio);
+        self.write(io);
     }
 
     // note: we can't use block reading since we don't know the block size yet
-    pub fn read(drive: &HardDrive) -> Option<SuperBlock> {
+    pub fn read<A: DeviceDriver>(drive: &A) -> Option<SuperBlock> {
         let mut buffer = drive.read_sector(0);
 
         if u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) != MAGIC {
             return None;
         }
 
-        return if drive.sector_size >= SUPERBLOCK_SIZE {
+        return if drive.get_sector_size() >= SUPERBLOCK_SIZE {
             Some(SuperBlock::from_buffer(&buffer))
         } else {
-            let block_count = SUPERBLOCK_SIZE / drive.sector_size;
+            let block_count = SUPERBLOCK_SIZE / drive.get_sector_size();
             for i in 1..(block_count - 1) {
                 buffer.append(&mut drive.read_sector(i as u64))
             }
@@ -58,22 +58,25 @@ impl SuperBlock {
         buffer
     }
 
-    pub fn write(&self, fsio: &FSIO) {
+    pub fn write<A: DeviceDriver>(&self, io: &mut IO<A>) {
         let mut buffer = self.to_buffer();
         buffer.append(&mut vec![0; self.block_size - buffer.len()]);
-        fsio.write_block(0, &buffer);
+        io.write_block(0, &buffer);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::driver::file_drive::FileDrive;
+    use crate::io::IO;
+
     #[test]
     fn read_write_superblock() {
-        let drive = super::HardDrive::new("./test-images/test_superblock.img", 1024 * 512, 512);
-        let fsio = super::FSIO::new(drive, 512);
+        let drive = FileDrive::new("./test-images/test_superblock.img", 1024 * 512, 512);
+        let mut io = IO::new(drive, 512);
         let superblock = super::SuperBlock::new(512, 1024);
-        superblock.write(&fsio);
-        let drive_superblock = super::SuperBlock::read(&fsio.drive).unwrap();
+        superblock.write(&mut io);
+        let drive_superblock = super::SuperBlock::read(&io.device).unwrap();
         assert_eq!(superblock, drive_superblock);
     }
 }

@@ -1,5 +1,6 @@
 use crate::consts::BlockPointer;
-use crate::fsio::FSIO;
+use crate::driver::DeviceDriver;
+use crate::io::IO;
 
 pub struct BlockMap {
     pub(crate) first_block: BlockPointer,
@@ -12,19 +13,19 @@ impl BlockMap {
         let data = BlockMap::create_data(block_count, block_size);
         let last_block = first_block + data.len() as u64 / block_size as u64;
         let mut map = BlockMap { first_block, last_block, data };
-        for i in 0..last_block {
+        for i in 0..last_block + 1 {
             map.mark_used_mem(i)
         }
         map
     }
 
-    pub fn read(fsio: &FSIO, index: BlockPointer) -> BlockMap {
-        let mut data = BlockMap::create_data(fsio.block_count, fsio.block_size);
-        let last_block = index + data.len() as u64 / fsio.block_size as u64;
+    pub fn read<A: DeviceDriver>(io: &IO<A>, index: BlockPointer) -> BlockMap {
+        let mut data = BlockMap::create_data(io.block_count, io.block_size);
+        let last_block = index + data.len() as u64 / io.block_size as u64;
         for i in index..last_block {
-            let offset = (i as usize - index as usize) * fsio.block_size;
-            let limit = (i as usize - index as usize + 1) * fsio.block_size;
-            let block = fsio.read_block(i);
+            let offset = (i as usize - index as usize) * io.block_size;
+            let limit = (i as usize - index as usize + 1) * io.block_size;
+            let block = io.read_block(i);
             data[offset..limit].copy_from_slice(&block);
         }
         BlockMap { first_block: index, last_block, data }
@@ -41,27 +42,27 @@ impl BlockMap {
         data
     }
 
-    pub fn write_part(&self, fsio: &FSIO, including_index: BlockPointer) {
-        let block = (including_index / fsio.block_size as u64 / 8) as usize;
-        let data = &self.data[block * fsio.block_size..(block + 1) * fsio.block_size];
-        fsio.write_block(self.first_block + block as u64, &data.to_vec());
+    pub fn write_part<A: DeviceDriver>(&self, io: &mut IO<A>, including_index: BlockPointer) {
+        let block = (including_index / io.block_size as u64 / 8) as usize;
+        let data = &self.data[block * io.block_size..(block + 1) * io.block_size];
+        io.write_block(self.first_block + block as u64, &data.to_vec());
     }
 
-    pub fn write_full(&self, fsio: &FSIO) {
+    pub fn write_full<A: DeviceDriver>(&self, io: &mut IO<A>) {
         for i in self.first_block..self.last_block {
-            let offset = (i as usize - self.first_block as usize) * fsio.block_size;
-            let limit = (i as usize - self.first_block as usize + 1) * fsio.block_size;
-            fsio.write_block(i, &self.data[offset..limit].to_vec());
+            let offset = (i as usize - self.first_block as usize) * io.block_size;
+            let limit = (i as usize - self.first_block as usize + 1) * io.block_size;
+            io.write_block(i, &self.data[offset..limit].to_vec());
         }
     }
 
-    pub fn allocate(&mut self, fsio: &FSIO) -> Option<u64> {
+    pub fn allocate<A: DeviceDriver>(&mut self, io: &mut IO<A>) -> Option<u64> {
         for byte_index in 0..self.data.len() {
             let byte = self.data[byte_index];
             for j in 0..8 {
                 if byte & (1 << j) == 0 {
                     let result = byte_index as u64 * 8 + j;
-                    self.mark_used(fsio, result);
+                    self.mark_used(io, result);
                     return Some(result);
                 }
             }
@@ -80,50 +81,51 @@ impl BlockMap {
     fn mark_used_mem(&mut self, index: BlockPointer) {
         let byte_index = (index / 8) as usize;
         let bit_index = (index % 8) as usize;
+        println!("Marking Used: {} {} {}", index, byte_index, bit_index);
         self.data[byte_index] |= 1 << bit_index;
     }
 
-    pub(crate) fn mark_used(&mut self, fsio: &FSIO, index: BlockPointer) {
+    pub(crate) fn mark_used<A: DeviceDriver>(&mut self, io: &mut IO<A>, index: BlockPointer) {
         self.mark_used_mem(index);
-        self.write_part(fsio, index);
+        self.write_part(io, index);
     }
 
     fn mark_free_mem(&mut self, index: BlockPointer) {
         let byte_index = (index / 8) as usize;
         let bit_index = (index % 8) as usize;
+        println!("Marking Free: {} {} {}", index, byte_index, bit_index);
         self.data[byte_index] &= !(1 << bit_index);
     }
 
-    pub(crate) fn mark_free(&mut self, fsio: &FSIO, index: BlockPointer) {
+    pub(crate) fn mark_free<A: DeviceDriver>(&mut self, io: &mut IO<A>, index: BlockPointer) {
         self.mark_free_mem(index);
-        self.write_part(fsio, index);
+        self.write_part(io, index);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use crate::fsio::FSIO;
-    use crate::emu::HardDrive;
+    use crate::driver::file_drive::FileDrive;
+    use crate::io::IO;
 
     #[test]
     fn read_write() {
-        let drive = HardDrive::new("./test-images/blockmap_read_write.img", 1024 * 512, 512);
-        let fsio = FSIO::new(drive, 1024);
+        let drive = FileDrive::new("./test-images/blockmap_read_write.img", 1024 * 512, 512);
+        let mut io = IO::new(drive, 1024);
         let blockmap = super::BlockMap::new(1, 1024, 1024);
-        blockmap.write_full(&fsio);
-        assert_eq!(blockmap.data, super::BlockMap::read(&fsio, 1).data)
+        blockmap.write_full(&mut io);
+        assert_eq!(blockmap.data, super::BlockMap::read(&io, 1).data)
     }
 
     #[test]
     fn allocate() {
-        let drive = HardDrive::new("./test-images/blockmap_allocate.img", 1024 * 512, 512);
-        let fsio = FSIO::new(drive, 1024);
+        let drive = FileDrive::new("./test-images/blockmap_allocate.img", 1024 * 512, 512);
+        let mut io = IO::new(drive, 1024);
         let mut blockmap = super::BlockMap::new(1, 1024, 1024);
-        let index = blockmap.allocate(&fsio).unwrap();
+        let index = blockmap.allocate(&mut io).unwrap();
         assert_eq!(blockmap.is_used(index), true);
-        blockmap.mark_free(&fsio, index);
+        blockmap.mark_free(&mut io, index);
         assert_eq!(blockmap.is_free(index), true);
-        assert_eq!(blockmap.data, super::BlockMap::read(&fsio, 1).data)
+        assert_eq!(blockmap.data, super::BlockMap::read(&io, 1).data)
     }
 }
