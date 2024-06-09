@@ -17,25 +17,24 @@ impl SuperBlock {
         SuperBlock { magic: MAGIC, block_size, block_count, inode_count: 0 }
     }
 
-    pub fn set_inode_count<A: DeviceDriver>(&mut self, io: &mut IO<A>, inode_count: u64) {
+    pub fn set_inode_count(&mut self, io: &mut IO, inode_count: u64) {
         self.inode_count = inode_count;
         self.write(io);
     }
 
-    // note: we can't use block reading since we don't know the block size yet
-    pub fn read<A: DeviceDriver>(drive: &A) -> Option<SuperBlock> {
-        let mut buffer = drive.read_sector(0);
+    pub fn read(io: &mut IO) -> Option<SuperBlock> {
+        let mut buffer = io.read_block(0);
 
         if u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]) != MAGIC {
             return None;
         }
 
-        return if drive.get_sector_size() >= SUPERBLOCK_SIZE {
+        return if io.get_block_size() >= SUPERBLOCK_SIZE {
             Some(SuperBlock::from_buffer(&buffer))
         } else {
-            let block_count = SUPERBLOCK_SIZE / drive.get_sector_size();
+            let block_count = SUPERBLOCK_SIZE / io.get_block_size();
             for i in 1..(block_count - 1) {
-                buffer.append(&mut drive.read_sector(i as u64))
+                buffer.append(&mut io.read_block(i as u64))
             }
             Some(SuperBlock::from_buffer(&buffer))
         }
@@ -58,7 +57,7 @@ impl SuperBlock {
         buffer
     }
 
-    pub fn write<A: DeviceDriver>(&self, io: &mut IO<A>) {
+    pub fn write(&self, io: &mut IO) {
         let mut buffer = self.to_buffer();
         buffer.append(&mut vec![0; self.block_size - buffer.len()]);
         io.write_block(0, &buffer);
@@ -76,7 +75,7 @@ mod tests {
         let mut io = IO::new(drive, 512);
         let superblock = super::SuperBlock::new(512, 1024);
         superblock.write(&mut io);
-        let drive_superblock = super::SuperBlock::read(&io.device).unwrap();
+        let drive_superblock = super::SuperBlock::read(&mut io).unwrap();
         assert_eq!(superblock, drive_superblock);
     }
 }

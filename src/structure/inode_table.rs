@@ -16,24 +16,24 @@ pub struct InodeTable<INODE: Inode> {
 }
 
 impl <INODE: Inode>InodeTable<INODE> {
-    pub fn create<A: DeviceDriver>(index: BlockPointer, io: &mut IO<A>) -> InodeTable<INODE> {
-        let inode_count = InodeTable::<INODE>::calculate_inode_count(io.block_count, io.block_size);
-        let map_blocks = inode_count / 8 / io.block_size as u64;
-        let inode_per_block = io.block_size as u64 / INODE::disk_size() as u64;
+    pub fn create(index: BlockPointer, io: &mut IO) -> InodeTable<INODE> {
+        let inode_count = InodeTable::<INODE>::calculate_inode_count(io.get_block_count(), io.get_block_size());
+        let map_blocks = inode_count / 8 / io.get_block_size() as u64;
+        let inode_per_block = io.get_block_size() as u64 / INODE::disk_size() as u64;
         let mut table_blocks = inode_count / inode_per_block;
         if inode_count % inode_per_block != 0 {
             table_blocks += 1;
         }
         let total_blocks = map_blocks + table_blocks;
         for i in 0..total_blocks {
-            io.write_block(index + i, &vec![0; io.block_size]);
+            io.write_block(index + i, &vec![0; io.get_block_size()]);
         }
         InodeTable { map: vec![0u8; (inode_count / 8u64) as usize], map_index: index, inode_count, table_index: index + map_blocks, block_count: total_blocks as usize, inode_type: PhantomData }
     }
 
-    pub fn read<A: DeviceDriver>(io: &IO<A>, index: BlockPointer, inode_count: u64) -> InodeTable<INODE> {
-        let map_blocks = inode_count / 8 / io.block_size as u64;
-        let inodes_per_block = io.block_size / INODE::disk_size();
+    pub fn read(io: &IO, index: BlockPointer, inode_count: u64) -> InodeTable<INODE> {
+        let map_blocks = inode_count / 8 / io.get_block_size() as u64;
+        let inodes_per_block = io.get_block_size() / INODE::disk_size();
         let mut table_blocks = inode_count / inodes_per_block as u64;
         if inode_count % inodes_per_block as u64 != 0 {
             table_blocks += 1;
@@ -43,9 +43,9 @@ impl <INODE: Inode>InodeTable<INODE> {
         InodeTable { map, map_index: index, inode_count, table_index: index + map_blocks, block_count: total_blocks as usize, inode_type: PhantomData }
     }
 
-    pub fn read_inode<A: DeviceDriver>(&self, io: &IO<A>, index: InodePointer) -> INODE {
-        let inode_block = self.inode_block(index, io.block_size);
-        let offset = Self::inode_offset(index, io.block_size);
+    pub fn read_inode(&self, io: &IO, index: InodePointer) -> INODE {
+        let inode_block = self.inode_block(index, io.get_block_size());
+        let offset = Self::inode_offset(index, io.get_block_size());
 
         let mut block = io.read_block(inode_block);
         let mut buffer = vec![0u8; INODE::disk_size()];
@@ -55,7 +55,7 @@ impl <INODE: Inode>InodeTable<INODE> {
         inode
     }
 
-    pub fn write_inode<A: DeviceDriver>(&mut self, io: &mut IO<A>, inode: &mut INODE) {
+    pub fn write_inode(&mut self, io: &mut IO, inode: &mut INODE) {
         match inode.id() {
             None => {
                 let index = self.allocate(io).unwrap();
@@ -63,8 +63,8 @@ impl <INODE: Inode>InodeTable<INODE> {
                 self.write_inode(io, inode);
             }
             Some(index) => {
-                let inode_block = self.inode_block(index, io.block_size);
-                let offset = Self::inode_offset(index, io.block_size);
+                let inode_block = self.inode_block(index, io.get_block_size());
+                let offset = Self::inode_offset(index, io.get_block_size());
 
                 let mut block = io.read_block(inode_block);
                 block[offset..offset + INODE::disk_size()].copy_from_slice(inode.to_bytes().as_slice());
@@ -83,7 +83,7 @@ impl <INODE: Inode>InodeTable<INODE> {
         (index % (block_size / INODE::disk_size()) as u64) as usize * INODE::disk_size()
     }
 
-    fn allocate<A: DeviceDriver>(&mut self, io: &mut IO<A>) -> Option<InodePointer> {
+    fn allocate(&mut self, io: &mut IO) -> Option<InodePointer> {
         for i in 0..self.map.len() {
             for j in 0..8 {
                 if self.map[i] & (1 << j) == 0 {
@@ -101,7 +101,7 @@ impl <INODE: Inode>InodeTable<INODE> {
         self.map[byte as usize] |= 1 << bit;
     }
 
-    fn mark_used<A: DeviceDriver>(&mut self, io: &mut IO<A>, index: InodePointer) {
+    fn mark_used(&mut self, io: &mut IO, index: InodePointer) {
         self.mark_used_mem(index);
         self.write_map(io);
     }
@@ -112,7 +112,7 @@ impl <INODE: Inode>InodeTable<INODE> {
         self.map[byte as usize] &= !(1 << bit);
     }
 
-    fn mark_free<A: DeviceDriver>(&mut self, io: &mut IO<A>, index: InodePointer) {
+    fn mark_free(&mut self, io: &mut IO, index: InodePointer) {
         self.mark_free_mem(index);
         self.write_map(io);
     }
@@ -123,12 +123,12 @@ impl <INODE: Inode>InodeTable<INODE> {
         return blocks * bits_per_block;
     }
 
-    fn read_map<A: DeviceDriver>(io: &IO<A>, index: BlockPointer, inode_count: u64) -> Vec<u8> {
+    fn read_map(io: &IO, index: BlockPointer, inode_count: u64) -> Vec<u8> {
         let mut map = vec![0u8; (inode_count / 8u64) as usize];
-        let map_blocks = inode_count / 8 / io.block_size as u64;
+        let map_blocks = inode_count / 8 / io.get_block_size() as u64;
         for i in 0..map_blocks as usize {
             let block = io.read_block(index + i as u64);
-            map[i * io.block_size..(i + 1) * io.block_size].copy_from_slice(&block);
+            map[i * io.get_block_size()..(i + 1) * io.get_block_size()].copy_from_slice(&block);
         }
         map
     }
@@ -136,8 +136,8 @@ impl <INODE: Inode>InodeTable<INODE> {
     // TODO: optimize this
     // - only write affected blocks
     // - cache some values
-    fn write_map<A: DeviceDriver>(&self, io: &mut IO<A>) {
-        let blocks = self.map.len() / io.block_size;
+    fn write_map(&self, io: &mut IO) {
+        let blocks = self.map.len() / io.get_block_size();
         for i in 0..blocks {
             let start = i * 512;
             let end = start + 512;
@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(new_table.table_index, 2);
         assert_eq!(new_table.block_count, 65);
 
-        let inode_table = super::InodeTable::<DummyInode>::read(&io, 1, new_table.inode_count);
+        let inode_table = super::InodeTable::<DummyInode>::read(&mut io, 1, new_table.inode_count);
         assert_eq!(inode_table.map.len(), 512);
         assert_eq!(inode_table.map_index, 1);
         assert_eq!(inode_table.inode_count, 512 * 8);
@@ -215,7 +215,7 @@ mod tests {
         let mut inode_table = super::InodeTable::<DummyInode>::create(1, &mut io);
         let mut memory_inode = DummyInode::new(42);
         inode_table.write_inode(&mut io, &mut memory_inode);
-        let mut fs_inode = inode_table.read_inode(&io, memory_inode.id().unwrap());
+        let mut fs_inode = inode_table.read_inode(&mut io, memory_inode.id().unwrap());
         assert_eq!(memory_inode.to_bytes(), fs_inode.to_bytes());
 
         memory_inode.data = 0x12345678;

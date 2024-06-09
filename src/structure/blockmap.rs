@@ -19,12 +19,12 @@ impl BlockMap {
         map
     }
 
-    pub fn read<A: DeviceDriver>(io: &IO<A>, index: BlockPointer) -> BlockMap {
-        let mut data = BlockMap::create_data(io.block_count, io.block_size);
-        let last_block = index + data.len() as u64 / io.block_size as u64;
+    pub fn read(io: &IO, index: BlockPointer) -> BlockMap {
+        let mut data = BlockMap::create_data(io.get_block_count(), io.get_block_size());
+        let last_block = index + data.len() as u64 / io.get_block_size() as u64;
         for i in index..last_block {
-            let offset = (i as usize - index as usize) * io.block_size;
-            let limit = (i as usize - index as usize + 1) * io.block_size;
+            let offset = (i as usize - index as usize) * io.get_block_size();
+            let limit = (i as usize - index as usize + 1) * io.get_block_size();
             let block = io.read_block(i);
             data[offset..limit].copy_from_slice(&block);
         }
@@ -42,21 +42,21 @@ impl BlockMap {
         data
     }
 
-    pub fn write_part<A: DeviceDriver>(&self, io: &mut IO<A>, including_index: BlockPointer) {
-        let block = (including_index / io.block_size as u64 / 8) as usize;
-        let data = &self.data[block * io.block_size..(block + 1) * io.block_size];
+    pub fn write_part(&self, io: &mut IO, including_index: BlockPointer) {
+        let block = (including_index / io.get_block_size() as u64 / 8) as usize;
+        let data = &self.data[block * io.get_block_size()..(block + 1) * io.get_block_size()];
         io.write_block(self.first_block + block as u64, &data.to_vec());
     }
 
-    pub fn write_full<A: DeviceDriver>(&self, io: &mut IO<A>) {
+    pub fn write_full(&self, io: &mut IO) {
         for i in self.first_block..self.last_block {
-            let offset = (i as usize - self.first_block as usize) * io.block_size;
-            let limit = (i as usize - self.first_block as usize + 1) * io.block_size;
+            let offset = (i as usize - self.first_block as usize) * io.get_block_size();
+            let limit = (i as usize - self.first_block as usize + 1) * io.get_block_size();
             io.write_block(i, &self.data[offset..limit].to_vec());
         }
     }
 
-    pub fn allocate<A: DeviceDriver>(&mut self, io: &mut IO<A>) -> Option<u64> {
+    pub fn allocate(&mut self, io: &mut IO) -> Option<u64> {
         for byte_index in 0..self.data.len() {
             let byte = self.data[byte_index];
             for j in 0..8 {
@@ -85,7 +85,7 @@ impl BlockMap {
         self.data[byte_index] |= 1 << bit_index;
     }
 
-    pub(crate) fn mark_used<A: DeviceDriver>(&mut self, io: &mut IO<A>, index: BlockPointer) {
+    pub(crate) fn mark_used(&mut self, io: &mut IO, index: BlockPointer) {
         self.mark_used_mem(index);
         self.write_part(io, index);
     }
@@ -97,7 +97,7 @@ impl BlockMap {
         self.data[byte_index] &= !(1 << bit_index);
     }
 
-    pub(crate) fn mark_free<A: DeviceDriver>(&mut self, io: &mut IO<A>, index: BlockPointer) {
+    pub(crate) fn mark_free(&mut self, io: &mut IO, index: BlockPointer) {
         self.mark_free_mem(index);
         self.write_part(io, index);
     }

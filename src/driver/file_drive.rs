@@ -27,6 +27,10 @@ impl DeviceDriver for FileDrive {
         self.bytes
     }
 
+    fn get_sector_count(&self) -> u64 {
+        self.bytes / self.sector_size as u64
+    }
+
     fn get_sector_size(&self) -> usize {
         self.sector_size
     }

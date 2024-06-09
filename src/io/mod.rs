@@ -1,20 +1,38 @@
+use std::ops::Range;
 use crate::consts::BlockPointer;
 use crate::driver::DeviceDriver;
-use raw::{raw_read_block, raw_write_block};
 
-mod raw;
-
-pub(crate) struct IO<A: DeviceDriver> {
-    // TODO: make private
-    pub(crate) device: A,
+pub(crate) struct IO {
+    pub drive: Box<dyn DeviceDriver>,
     pub block_size: usize,
     pub block_count: u64,
 }
 
-impl <A: DeviceDriver>IO<A> {
-    pub fn new(device: A, block_size: usize) -> IO<A> {
-        let block_count = device.get_size() / block_size as u64;
-        IO { device, block_size, block_count }
+impl IO {
+    pub(crate) fn new<D: DeviceDriver + 'static>(drive: D, block_size: usize) -> IO {
+        let block_count = drive.get_size() / block_size as u64;
+        IO { drive: Box::new(drive), block_size, block_count }
+    }
+
+    pub(crate) fn get_block_size(&self) -> usize {
+        self.block_size
+    }
+
+    pub(crate) fn get_block_count(&self) -> u64 {
+        self.block_count
+    }
+
+    pub(crate) fn set_block_size(&mut self, block_size: usize) {
+        self.block_size = block_size;
+        self.block_count = self.drive.get_size() / block_size as u64;
+    }
+
+    pub(crate) fn get_sector_size(&self) -> usize {
+        self.drive.get_sector_size()
+    }
+
+    pub(crate) fn get_sector_count(&self) -> u64 {
+        self.drive.get_sector_count()
     }
 
     pub(crate) fn write_block(&mut self, index: BlockPointer, block: &Vec<u8>) {
@@ -26,7 +44,20 @@ impl <A: DeviceDriver>IO<A> {
             panic!("Block index out of range");
         }
 
-        raw_write_block(&mut self.device, self.block_size, block, index);
+        if self.block_size == self.drive.get_sector_size() {
+            self.drive.write_sector(index, block);
+        } else {
+            let ratio = (self.block_size / self.drive.get_sector_size()) as u64;
+            let start = index * ratio;
+            let end = start + ratio;
+
+            for i in start..end {
+                let offset = (i - start) as usize * self.drive.get_sector_size();
+                let limit = offset + self.drive.get_sector_size();
+                println!("Writing sector {} - Offset {} :: Limit {}", i, offset, limit);
+                self.drive.write_sector(i, &block[(offset..limit) as Range<usize>].to_vec())
+            }
+        }
     }
 
     pub(crate) fn read_block(&self, index: BlockPointer) -> Vec<u8> {
@@ -34,7 +65,23 @@ impl <A: DeviceDriver>IO<A> {
             panic!("Block index out of range");
         }
 
-        raw_read_block(&self.device, self.block_size, index)
+        if self.block_size == self.drive.get_sector_size() {
+            self.drive.read_sector(index)
+        } else {
+            let ratio = (self.block_size / self.drive.get_sector_size()) as u64;
+            let mut buffer = Vec::new();
+
+            let start = index * ratio;
+            let end = start + (self.block_size / self.drive.get_sector_size()) as u64;
+
+            if self.block_size >= self.drive.get_sector_size() {
+                for i in start..end {
+                    buffer.append(&mut self.drive.read_sector(i));
+                }
+            }
+
+            buffer
+        }
     }
 }
 

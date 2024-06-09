@@ -1,71 +1,72 @@
-use crate::blockmap::BlockMap;
-use crate::consts::{SUPERBLOCK_SIZE};
-use crate::directory::Directory;
 use crate::driver::DeviceDriver;
-use crate::inode_table::InodeTable;
 use crate::io::IO;
-use crate::superblock::SuperBlock;
+use crate::structure::Structure;
+use crate::structure::inode::Inode;
 
-pub struct FS<A: DeviceDriver> {
-    pub(crate) io: IO<A>,
-    pub(crate) superblock: SuperBlock,
-    pub(crate) blockmap: BlockMap,
-    pub(crate) inode_table: InodeTable,
+pub struct FS<INODE: Inode> {
+    pub(crate) io: IO,
+    pub(crate) structure: Structure<INODE>,
 }
 
-impl <A: DeviceDriver>FS<A> {
-    pub fn new(drive: A, block_size: usize) -> FS<A> {
-        if block_size < drive.get_sector_size() {
-            panic!("Block size must be greater than or equal to sector size");
-        }
-
-        if block_size % drive.get_sector_size() != 0 {
-            panic!("Block size must be a multiple of sector size");
-        }
-
+impl <INODE: Inode>FS<INODE> {
+    pub fn new<D: DeviceDriver + 'static>(drive: D, block_size: usize) -> FS<INODE> {
         let mut io = IO::new(drive, block_size);
-        let mut superblock = SuperBlock::new(block_size, io.device.get_size() / block_size as u64);
-        superblock.write(&mut io);
-
-        let mut blockmap = BlockMap::new((SUPERBLOCK_SIZE / io.block_size) as u64, superblock.block_count, block_size);
-        blockmap.write_full(&mut io);
-
-        let inode_index = blockmap.last_block + 1;
-        let inode_table = InodeTable::create(inode_index, &mut io);
-        for i in 0..inode_table.block_count {
-            blockmap.mark_used(&mut io, inode_index + i as u64);
-        }
-        superblock.set_inode_count(&mut io, inode_table.inode_count);
-
-        FS::mount(io.device)
+        let structure = Structure::<INODE>::new(&mut io, block_size);
+        FS { io, structure }
     }
 
-    pub fn mount(device: A) -> FS<A> {
-        match SuperBlock::read(&device) {
-            Some(superblock) => {
-                let io = IO::new(device, superblock.block_size);
-                let blockmap = BlockMap::read(&io, (SUPERBLOCK_SIZE / io.block_size) as u64);
-                let inode_table = InodeTable::read(&io, blockmap.last_block + 1, superblock.inode_count);
-                FS { io, superblock, blockmap, inode_table }
-            }
-            None => panic!("No superblock found"),
-        }
-    }
-
-    pub fn create_dir(&'static mut self) -> Directory {
-        Directory::create(self)
+    pub fn mount<D: DeviceDriver + 'static>(drive: D) -> FS<INODE> {
+        let default_block_size = drive.get_sector_size();
+        let mut io = IO::new(drive, default_block_size);
+        let structure = Structure::<INODE>::mount(&mut io);
+        FS { io, structure }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::mem::size_of;
     use crate::driver::file_drive::FileDrive;
-    use crate::superblock::SuperBlock;
+    use crate::structure::inode::{Inode, INODE_ID};
+    use crate::structure::superblock::SuperBlock;
+
+    struct DummyInode {
+        id: Option<INODE_ID>,
+        data: u64,
+    }
+
+    impl DummyInode {
+        fn new(data: u64) -> DummyInode {
+            DummyInode { id: None, data }
+        }
+    }
+
+    impl Inode for DummyInode {
+        fn id(&self) -> Option<INODE_ID> {
+            self.id
+        }
+
+        fn set_id(&mut self, id: INODE_ID) {
+            self.id = Some(id);
+        }
+
+        fn to_bytes(&self) -> Vec<u8> {
+            self.data.to_le_bytes().to_vec()
+        }
+
+        fn from_bytes(bytes: &Vec<u8>) -> Self {
+            DummyInode { id: None, data: u64::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]]) }
+        }
+
+        fn disk_size() -> usize {
+            size_of::<u64>()
+        }
+    }
 
     #[test]
     fn init() {
         let drive = FileDrive::new("./test-images/fs_init.img", 1024 * 512, 512);
-        let fs = super::FS::new(drive, 512);
-        assert_eq!(fs.superblock, SuperBlock::new(512, 1024));
+        let fs = super::FS::<DummyInode>::new(drive, 512);
+        assert_eq!(fs.structure.super_block, SuperBlock::new(512, 1024));
     }
 }
