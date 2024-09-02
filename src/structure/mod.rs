@@ -1,9 +1,8 @@
-use crate::consts::SUPERBLOCK_SIZE;
+use crate::consts::{BlockPointer, SUPERBLOCK_SIZE};
 use crate::driver::DeviceDriver;
-use crate::fs::FS;
 use crate::io::IO;
 use crate::structure::blockmap::BlockMap;
-use crate::structure::inode::Inode;
+use crate::structure::inode::{Inode, INODE_ID};
 use crate::structure::superblock::SuperBlock;
 use crate::structure::inode_table::InodeTable;
 
@@ -12,14 +11,17 @@ pub(crate) mod inode;
 pub(crate) mod blockmap;
 pub(crate) mod superblock;
 
-pub struct Structure<INODE: Inode> {
+pub struct Structure {
+    io: IO,
     pub(crate) super_block: SuperBlock,
-    block_map: BlockMap,
-    inode_table: InodeTable<INODE>,
+    pub(crate) block_map: BlockMap,
+    pub(crate) inode_table: InodeTable,
 }
 
-impl <INODE: Inode>Structure<INODE> {
-    pub fn new(io: &mut IO, block_size: usize) -> Structure<INODE> {
+impl Structure {
+    pub fn new<D: DeviceDriver + 'static>(drive: D, block_size: usize) -> Structure {
+        let mut io = IO::new(drive, block_size);
+
         if block_size < io.get_sector_size() {
             panic!("Block size must be greater than or equal to sector size");
         }
@@ -29,31 +31,58 @@ impl <INODE: Inode>Structure<INODE> {
         }
 
         io.set_block_size(block_size);
-        let mut superblock = SuperBlock::new(block_size, io.block_count);
-        superblock.write(io);
+        let mut super_block = SuperBlock::new(block_size, io.block_count);
+        super_block.write(&mut io);
 
-        let mut blockmap = BlockMap::new((SUPERBLOCK_SIZE / io.get_block_size()) as u64, superblock.block_count, block_size);
-        blockmap.write_full(io);
+        let mut block_map = BlockMap::new((SUPERBLOCK_SIZE / io.get_block_size()) as u64, super_block.block_count, block_size);
+        block_map.write_full(&mut io);
 
-        let inode_index = blockmap.last_block + 1;
-        let inode_table = InodeTable::<INODE>::create(inode_index, io);
+        let inode_index = block_map.last_block + 1;
+        let inode_table = InodeTable::create(inode_index, &mut io);
         for i in 0..inode_table.block_count {
-            blockmap.mark_used(io, inode_index + i as u64);
+            block_map.mark_used(&mut io, inode_index + i as u64);
         }
-        superblock.set_inode_count(io, inode_table.inode_count);
+        super_block.set_inode_count(&mut io, inode_table.inode_count);
 
-        Structure::mount(io)
+        Structure { io, super_block, block_map, inode_table }
     }
 
-    pub fn mount(io: &mut IO) -> Structure<INODE> {
-        match SuperBlock::read(io) {
+    pub fn mount<D: DeviceDriver + 'static>(drive: D) -> Structure {
+        let default_block_size = drive.get_sector_size();
+        let mut io = IO::new(drive, default_block_size);
+
+        match SuperBlock::read(&mut io) {
             Some(super_block) => {
                 io.set_block_size(super_block.block_size);
-                let block_map = BlockMap::read(io, (SUPERBLOCK_SIZE / io.get_block_size()) as u64);
-                let inode_table = InodeTable::<INODE>::read(io, block_map.last_block + 1, super_block.inode_count);
-                Structure { super_block, block_map, inode_table }
+                let block_map = BlockMap::read(&mut io, (SUPERBLOCK_SIZE / super_block.block_size) as u64);
+                let inode_table = InodeTable::read(&mut io, block_map.last_block + 1, super_block.inode_count);
+                Structure { io, super_block, block_map, inode_table }
             }
             None => panic!("No superblock found"),
         }
+    }
+
+    pub fn read_inode(&self, id: INODE_ID) -> Inode {
+        self.inode_table.read_inode(&self.io, id)
+    }
+
+    pub fn write_inode(&mut self, inode: &mut Inode) {
+        self.inode_table.write_inode(&mut self.io, inode);
+    }
+
+    pub fn get_block_size(&self) -> usize {
+        self.super_block.block_size
+    }
+
+    pub fn allocate_block(&mut self) -> Option<BlockPointer> {
+        self.block_map.allocate(&mut self.io)
+    }
+
+    pub fn write_block(&mut self, index: BlockPointer, block: &Vec<u8>) {
+        self.io.write_block(index, block);
+    }
+
+    pub fn read_block(&self, index: BlockPointer) -> Vec<u8> {
+        self.io.read_block(index)
     }
 }

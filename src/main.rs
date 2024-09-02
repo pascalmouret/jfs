@@ -1,10 +1,6 @@
 extern crate core;
 
-mod fs;
 mod consts;
-mod inode_table;
-mod inode;
-mod directory;
 mod driver;
 mod io;
 mod structure;
