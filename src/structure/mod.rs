@@ -2,7 +2,7 @@ use crate::consts::{BlockPointer, SUPERBLOCK_SIZE};
 use crate::driver::DeviceDriver;
 use crate::io::IO;
 use crate::structure::blockmap::BlockMap;
-use crate::structure::inode::{Inode, INODE_ID};
+use crate::structure::inode::{Inode, Metadata, INODE_ID};
 use crate::structure::superblock::SuperBlock;
 use crate::structure::inode_table::InodeTable;
 
@@ -11,15 +11,15 @@ pub(crate) mod inode;
 pub(crate) mod blockmap;
 pub(crate) mod superblock;
 
-pub struct Structure {
+pub struct Structure<META:Metadata> {
     io: IO,
     pub(crate) super_block: SuperBlock,
     pub(crate) block_map: BlockMap,
-    pub(crate) inode_table: InodeTable,
+    pub(crate) inode_table: InodeTable<META>,
 }
 
-impl Structure {
-    pub fn new<D: DeviceDriver + 'static>(drive: D, block_size: usize) -> Structure {
+impl <META:Metadata>Structure<META> {
+    pub fn new<D: DeviceDriver + 'static>(drive: D, block_size: usize) -> Structure<META> {
         let mut io = IO::new(drive, block_size);
 
         if block_size < io.get_sector_size() {
@@ -47,7 +47,7 @@ impl Structure {
         Structure { io, super_block, block_map, inode_table }
     }
 
-    pub fn mount<D: DeviceDriver + 'static>(drive: D) -> Structure {
+    pub fn mount<D: DeviceDriver + 'static>(drive: D) -> Structure<META> {
         let default_block_size = drive.get_sector_size();
         let mut io = IO::new(drive, default_block_size);
 
@@ -62,11 +62,11 @@ impl Structure {
         }
     }
 
-    pub fn read_inode(&self, id: INODE_ID) -> Inode {
+    pub fn read_inode(&self, id: INODE_ID) -> Inode<META> {
         self.inode_table.read_inode(&self.io, id)
     }
 
-    pub fn write_inode(&mut self, inode: &mut Inode) {
+    pub fn write_inode(&mut self, inode: &mut Inode<META>) {
         self.inode_table.write_inode(&mut self.io, inode);
     }
 

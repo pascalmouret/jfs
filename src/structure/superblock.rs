@@ -29,7 +29,7 @@ impl SuperBlock {
             return None;
         }
 
-        return if io.get_block_size() >= SUPERBLOCK_SIZE {
+        if io.get_block_size() >= SUPERBLOCK_SIZE {
             Some(SuperBlock::from_buffer(&buffer))
         } else {
             let block_count = SUPERBLOCK_SIZE / io.get_block_size();
