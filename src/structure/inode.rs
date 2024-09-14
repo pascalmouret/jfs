@@ -9,14 +9,14 @@ const NULL_POINTER: BlockPointer = 0;
 
 pub type INODE_ID = u64;
 
-pub trait Metadata {
+pub trait ByteSerializable {
     fn to_bytes(&self) -> Vec<u8>;
     fn from_bytes(bytes: &[u8]) -> Self;
 }
 
 // TODO: add metadata support
 // TODO: probably doesn't need public members
-pub struct Inode<META:Metadata> {
+pub struct Inode<META: ByteSerializable> {
     pub(crate) id: Option<INODE_ID>,
     pub(crate) pointers: DirectPointers,
     pub(crate) size: u64,
@@ -25,7 +25,7 @@ pub struct Inode<META:Metadata> {
     pub(crate) allocated_size: u64,
 }
 
-impl <META:Metadata>Inode<META> {
+impl <META: ByteSerializable>Inode<META> {
     pub fn new(meta: META) -> Inode<META> {
         Inode { id: None, pointers: [NULL_POINTER; 12], size: 0, used_pointers: 0, allocated_size: 0, meta }
     }
@@ -177,7 +177,7 @@ impl <META:Metadata>Inode<META> {
 
 #[cfg(test)]
 mod tests {
-    use crate::structure::inode::{Inode, Metadata};
+    use crate::structure::inode::{Inode, ByteSerializable};
     use crate::structure::Structure;
     use crate::driver::file_drive::FileDrive;
 
@@ -186,7 +186,7 @@ mod tests {
         magic: u32,
     }
 
-    impl Metadata for DummyMeta {
+    impl ByteSerializable for DummyMeta {
         fn to_bytes(&self) -> Vec<u8> {
             self.magic.to_le_bytes().to_vec()
         }

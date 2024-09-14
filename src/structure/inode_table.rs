@@ -2,11 +2,11 @@ use std::marker::PhantomData;
 use crate::consts::{BlockPointer, BLOCKS_PER_INODE_MAP, DIRECT_POINTERS, DirectPointers, InodePointer};
 use crate::driver::DeviceDriver;
 use crate::io::IO;
-use crate::structure::inode::{Inode, Metadata};
+use crate::structure::inode::{Inode, ByteSerializable};
 
 const EMPTY_POINTERS: DirectPointers = [0 as BlockPointer; DIRECT_POINTERS];
 
-pub struct InodeTable<META:Metadata> {
+pub struct InodeTable<META: ByteSerializable> {
     map: Vec<u8>,
     map_index: u64,
     pub(crate) inode_count: u64,
@@ -154,14 +154,14 @@ impl <META:Metadata>InodeTable<META> {
 mod tests {
     use crate::driver::file_drive::FileDrive;
     use crate::io::IO;
-    use crate::structure::inode::{Inode, Metadata};
+    use crate::structure::inode::{Inode, ByteSerializable};
 
     #[derive(Debug, PartialEq)]
     struct DummyMeta {
         magic: u32,
     }
 
-    impl Metadata for DummyMeta {
+    impl ByteSerializable for DummyMeta {
         fn to_bytes(&self) -> Vec<u8> {
             self.magic.to_le_bytes().to_vec()
         }

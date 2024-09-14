@@ -2,23 +2,24 @@ use crate::consts::{BlockPointer, SUPERBLOCK_SIZE};
 use crate::driver::DeviceDriver;
 use crate::io::IO;
 use crate::structure::blockmap::BlockMap;
-use crate::structure::inode::{Inode, Metadata, INODE_ID};
+use crate::structure::inode::{Inode, ByteSerializable, INODE_ID};
 use crate::structure::superblock::SuperBlock;
 use crate::structure::inode_table::InodeTable;
+use crate::util::format::pretty_size_from_bytes;
 
 mod inode_table;
 pub(crate) mod inode;
 pub(crate) mod blockmap;
 pub(crate) mod superblock;
 
-pub struct Structure<META:Metadata> {
+pub struct Structure<META: ByteSerializable> {
     io: IO,
     pub(crate) super_block: SuperBlock,
     pub(crate) block_map: BlockMap,
     pub(crate) inode_table: InodeTable<META>,
 }
 
-impl <META:Metadata>Structure<META> {
+impl <META: ByteSerializable>Structure<META> {
     pub fn new<D: DeviceDriver + 'static>(drive: D, block_size: usize) -> Structure<META> {
         let mut io = IO::new(drive, block_size);
 
