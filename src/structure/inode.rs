@@ -70,7 +70,9 @@ impl <META:Metadata>Inode<META> {
         let chunks = data.chunks(structure.get_block_size());
         for (i, chunk) in chunks.enumerate() {
             let block = self.pointers[i];
-            structure.io.write_block(block, &chunk.to_vec());
+            let mut data = chunk.to_vec();
+            data.resize(structure.get_block_size(), 0);
+            structure.io.write_block(block, &data);
         }
     }
 

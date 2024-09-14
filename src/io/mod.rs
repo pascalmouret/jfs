@@ -54,7 +54,6 @@ impl IO {
             for i in start..end {
                 let offset = (i - start) as usize * self.drive.get_sector_size();
                 let limit = offset + self.drive.get_sector_size();
-                println!("Writing sector {} - Offset {} :: Limit {}", i, offset, limit);
                 self.drive.write_sector(i, &block[(offset..limit) as Range<usize>].to_vec())
             }
         }

@@ -30,6 +30,13 @@ impl <META:Metadata>Structure<META> {
             panic!("Block size must be a multiple of sector size");
         }
 
+        println!("Building structure...");
+        println!("Inode size: {}", Inode::<META>::size_on_disk());
+        println!("Drive size: {}", pretty_size_from_bytes(io.drive.get_size()));
+        println!("Sector size: {}", io.get_sector_size());
+        println!("Block size: {}", block_size);
+        println!("Block count: {}", io.block_count);
+
         io.set_block_size(block_size);
         let mut super_block = SuperBlock::new(block_size, io.block_count);
         super_block.write(&mut io);
@@ -37,12 +44,18 @@ impl <META:Metadata>Structure<META> {
         let mut block_map = BlockMap::new((SUPERBLOCK_SIZE / io.get_block_size()) as u64, super_block.block_count, block_size);
         block_map.write_full(&mut io);
 
+        println!("Block map size: {}", pretty_size_from_bytes((block_map.last_block - block_map.first_block + 1) * block_size as u64));
+        println!("Block map blocks: {}", block_map.last_block - block_map.first_block + 1);
+
         let inode_index = block_map.last_block + 1;
         let inode_table = InodeTable::create(inode_index, &mut io);
         for i in 0..inode_table.block_count {
             block_map.mark_used(&mut io, inode_index + i as u64);
         }
         super_block.set_inode_count(&mut io, inode_table.inode_count);
+
+        println!("Inode table size: {}", pretty_size_from_bytes(inode_table.block_count as u64 * block_size as u64));
+        println!("Inode table blocks: {}", inode_table.block_count);
 
         Structure { io, super_block, block_map, inode_table }
     }

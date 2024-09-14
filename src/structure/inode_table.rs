@@ -119,7 +119,11 @@ impl <META:Metadata>InodeTable<META> {
     fn calculate_inode_count(block_count: u64, block_size: usize) -> u64 {
         let bits_per_block = (block_size * 8) as u64;
         let blocks = block_count / BLOCKS_PER_INODE_MAP as u64;
-        blocks * bits_per_block
+        if blocks == 0 {
+            bits_per_block
+        } else {
+            blocks * bits_per_block
+        }
     }
 
     fn read_map(io: &IO, index: BlockPointer, inode_count: u64) -> Vec<u8> {
@@ -138,8 +142,8 @@ impl <META:Metadata>InodeTable<META> {
     fn write_map(&self, io: &mut IO) {
         let blocks = self.map.len() / io.get_block_size();
         for i in 0..blocks {
-            let start = i * 512;
-            let end = start + 512;
+            let start = i * io.get_block_size();
+            let end = start + io.get_block_size();
             let block = self.map[start..end].to_vec();
             io.write_block(self.map_index + i as u64, &block);
         }
