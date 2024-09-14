@@ -76,6 +76,12 @@ impl <META: ByteSerializable>Structure<META> {
         }
     }
 
+    pub fn create_inode(&mut self, meta: META) -> Inode<META> {
+        let mut inode = Inode::new(meta);
+        self.inode_table.write_inode(&mut self.io, &mut inode);
+        inode
+    }
+
     pub fn read_inode(&self, id: INODE_ID) -> Inode<META> {
         self.inode_table.read_inode(&self.io, id)
     }

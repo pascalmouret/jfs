@@ -77,7 +77,7 @@ impl <META: ByteSerializable>Inode<META> {
     }
 
     // TODO: chunks
-    pub fn get_data(&self, structure: &mut Structure<META>) -> Vec<u8> {
+    pub fn get_data(&self, structure: &Structure<META>) -> Vec<u8> {
         let mut result = Vec::<u8>::new();
 
         for i in 0..self.used_pointers {
