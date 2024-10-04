@@ -1,12 +1,12 @@
 use std::marker::PhantomData;
 use crate::consts::{BlockPointer, BLOCKS_PER_INODE_MAP, DIRECT_POINTERS, DirectPointers, InodePointer};
-use crate::driver::DeviceDriver;
 use crate::io::IO;
-use crate::structure::inode::{Inode, ByteSerializable};
+use crate::structure::inode::Inode;
+use crate::util::serializable::{ByteSerializable, KnownSize};
 
 const EMPTY_POINTERS: DirectPointers = [0 as BlockPointer; DIRECT_POINTERS];
 
-pub struct InodeTable<META: ByteSerializable> {
+pub struct InodeTable<META: ByteSerializable + KnownSize> {
     map: Vec<u8>,
     map_index: u64,
     pub(crate) inode_count: u64,
@@ -15,7 +15,7 @@ pub struct InodeTable<META: ByteSerializable> {
     meta: PhantomData<META>
 }
 
-impl <META:Metadata>InodeTable<META> {
+impl <META: ByteSerializable + KnownSize>InodeTable<META> {
     pub fn create(index: BlockPointer, io: &mut IO) -> InodeTable<META> {
         let inode_count = InodeTable::<META>::calculate_inode_count(io.get_block_count(), io.get_block_size());
         let map_blocks = inode_count / 8 / io.get_block_size() as u64;
@@ -154,11 +154,18 @@ impl <META:Metadata>InodeTable<META> {
 mod tests {
     use crate::driver::file_drive::FileDrive;
     use crate::io::IO;
-    use crate::structure::inode::{Inode, ByteSerializable};
+    use crate::structure::inode::Inode;
+    use crate::util::serializable::{ByteSerializable, KnownSize};
 
     #[derive(Debug, PartialEq)]
     struct DummyMeta {
         magic: u32,
+    }
+
+    impl KnownSize for DummyMeta {
+        fn size_on_disk() -> usize {
+            4
+        }
     }
 
     impl ByteSerializable for DummyMeta {

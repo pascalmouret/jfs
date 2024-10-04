@@ -1,12 +1,16 @@
+use std::ffi::OsString;
 use std::mem::size_of;
 use crate::consts::FILE_NAME_LENGTH;
+use crate::ops::file::File;
 use crate::ops::meta::{InodeType, Metadata};
-use crate::structure::inode::{ByteSerializable, Inode, INODE_ID};
+use crate::structure::inode::{Inode, INODE_ID};
 use crate::structure::Structure;
+use crate::util::serializable::ByteSerializable;
 
 #[derive(Debug, PartialEq)]
 struct Entry {
-    name: String,
+    // TODO: use something better for this, or at least find a safe way to decode it
+    name: OsString,
     id: INODE_ID,
 }
 
@@ -17,8 +21,9 @@ impl ByteSerializable for EntryList {
         let mut bytes = Vec::<u8>::new();
         for entry in self {
             bytes.extend_from_slice(&entry.id.to_le_bytes());
-            bytes.extend_from_slice(&(entry.name.len() as u8).to_le_bytes());
-            bytes.extend_from_slice(entry.name.as_bytes());
+            let name_bytes = entry.name.as_encoded_bytes();
+            bytes.extend_from_slice(&(name_bytes.len() as u8).to_le_bytes());
+            bytes.extend_from_slice(name_bytes);
         }
         bytes
     }
@@ -26,28 +31,30 @@ impl ByteSerializable for EntryList {
     fn from_bytes(bytes: &[u8]) -> Self {
         let mut entries = Vec::<Entry>::new();
         let mut data = bytes;
-        while data.len() > 0 {
-            let (id_bytes, remainder) = data.split_at(size_of::<INODE_ID>());
-            let (name_length_bytes, remainder) = remainder.split_at(size_of::<u8>());
-            let (name_bytes, remainder) = remainder.split_at(name_length_bytes[0] as usize);
+        unsafe {
+            while data.len() > 0 {
+                let (id_bytes, remainder) = data.split_at(size_of::<INODE_ID>());
+                let (name_length_bytes, remainder) = remainder.split_at(size_of::<u8>());
+                let (name_bytes, remainder) = remainder.split_at(name_length_bytes[0] as usize);
 
-            let id = INODE_ID::from_le_bytes(id_bytes.try_into().unwrap());
-            let name = String::from_utf8(name_bytes.to_vec()).unwrap();
-            entries.push(Entry { name, id });
+                let id = INODE_ID::from_le_bytes(id_bytes.try_into().unwrap());
+                let name = OsString::from_encoded_bytes_unchecked(name_bytes.to_vec());
+                entries.push(Entry { name, id });
 
-            data = remainder;
+                data = remainder;
+            }
         }
         entries
     }
 }
 
-struct Directory {
-    inode: Inode<Metadata>,
+pub struct Directory {
+    pub inode: Inode<Metadata>,
 }
 
 impl Directory {
-    pub fn new(structure: &mut Structure<Metadata>) -> Directory {
-        let meta = Metadata { inode_type: InodeType::Directory };
+    pub fn new(structure: &mut Structure<Metadata>, permissions: u16) -> Directory {
+        let meta = Metadata::new(InodeType::Directory, permissions, 2, 0);
         let inode = structure.create_inode(meta);
         Directory {
             inode,
@@ -65,7 +72,7 @@ impl Directory {
         EntryList::from_bytes(&data)
     }
 
-    pub fn add_entry(&mut self, structure: &mut Structure<Metadata>, name: &String, id: INODE_ID) {
+    fn add_entry(&mut self, structure: &mut Structure<Metadata>, name: &OsString, id: INODE_ID) {
         if name.len() > FILE_NAME_LENGTH {
             panic!("Name too long");
         }
@@ -74,18 +81,41 @@ impl Directory {
         entries.push(Entry { name: name.clone(), id });
         self.inode.set_data(structure, entries.to_bytes());
     }
+
+    pub fn add_directory(
+        &mut self, structure: &mut Structure<Metadata>,
+        name: &OsString,
+        permissions: u16,
+    ) -> Directory {
+        let directory = Directory::new(structure, permissions);
+        self.add_entry(structure, name, directory.inode.id.unwrap());
+        directory
+    }
+
+    pub fn add_file(
+        &mut self,
+        structure: &mut Structure<Metadata>,
+        name: &OsString,
+        permissions: u16,
+    ) -> File {
+        let file = File::new(structure, permissions);
+        self.add_entry(structure, name, file.inode.id.unwrap());
+        file
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
     use crate::driver::file_drive::FileDrive;
+    use crate::io::IO;
     use super::*;
 
     #[test]
     fn test_entry_list_to_bytes() {
         let entries = vec![
-            Entry { name: "file1".to_string(), id: 1 },
-            Entry { name: "file2".to_string(), id: 2 },
+            Entry { name: OsString::from("file1"), id: 1 },
+            Entry { name: OsString::from("file2"), id: 2 },
         ];
         let bytes = entries.to_bytes();
         let expected = vec![
@@ -97,8 +127,8 @@ mod tests {
     #[test]
     fn test_entry_list_from_bytes() {
         let entries = vec![
-            Entry { name: "file1".to_string(), id: 1 },
-            Entry { name: "file2".to_string(), id: 2 },
+            Entry { name: OsString::from("file1"), id: 1 },
+            Entry { name: OsString::from("file2"), id: 2 },
         ];
         let bytes = entries.to_bytes();
         assert_eq!(entries, EntryList::from_bytes(&bytes));
@@ -107,8 +137,9 @@ mod tests {
     #[test]
     fn test_directory_new() {
         let drive = FileDrive::new("./test-images/test_directory_new.img", 2048 * 1024 * 5, 512);
-        let mut structure = Structure::<Metadata>::new(drive, 512);
-        let mut directory = Directory::new(&mut structure);
+        let io = IO::new(drive, 512);
+        let mut structure = Structure::<Metadata>::new(io, 512);
+        let mut directory = Directory::new(&mut structure, 0o755);
         let entries = directory.get_entries(&structure);
         assert_eq!(entries.len(), 0);
     }
@@ -116,9 +147,10 @@ mod tests {
     #[test]
     fn test_directory_add_entry() {
         let drive = FileDrive::new("./test-images/test_directory_add_entry.img", 2048 * 1024 * 5, 512);
-        let mut structure = Structure::<Metadata>::new(drive, 1024);
-        let mut directory = Directory::new(&mut structure);
-        directory.add_entry(&mut structure, &"file1".to_string(), 1);
+        let io = IO::new(drive, 1024);
+        let mut structure = Structure::<Metadata>::new(io, 1024);
+        let mut directory = Directory::new(&mut structure, 0o755);
+        directory.add_entry(&mut structure, &OsString::from("file1"), 1);
         let entries = directory.get_entries(&structure);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].name, "file1");

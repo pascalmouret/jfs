@@ -2,27 +2,33 @@ use crate::consts::{BlockPointer, SUPERBLOCK_SIZE};
 use crate::driver::DeviceDriver;
 use crate::io::IO;
 use crate::structure::blockmap::BlockMap;
-use crate::structure::inode::{Inode, ByteSerializable, INODE_ID};
+use crate::structure::inode::{Inode, INODE_ID};
 use crate::structure::superblock::SuperBlock;
 use crate::structure::inode_table::InodeTable;
 use crate::util::format::pretty_size_from_bytes;
+use crate::util::serializable::{ByteSerializable, KnownSize};
 
 mod inode_table;
 pub(crate) mod inode;
 pub(crate) mod blockmap;
 pub(crate) mod superblock;
 
-pub struct Structure<META: ByteSerializable> {
+pub struct Structure<META: ByteSerializable + KnownSize> {
     io: IO,
     pub(crate) super_block: SuperBlock,
     pub(crate) block_map: BlockMap,
     pub(crate) inode_table: InodeTable<META>,
 }
 
-impl <META: ByteSerializable>Structure<META> {
-    pub fn new<D: DeviceDriver + 'static>(drive: D, block_size: usize) -> Structure<META> {
-        let mut io = IO::new(drive, block_size);
+impl <META: ByteSerializable + KnownSize>Structure<META> {
+    pub fn is_initialized(io: &IO) -> bool {
+        match SuperBlock::read(io) {
+            Some(_) => true,
+            None => false
+        }
+    }
 
+    pub fn new(mut io: IO, block_size: usize) -> Structure<META> {
         if block_size < io.get_sector_size() {
             panic!("Block size must be greater than or equal to sector size");
         }
@@ -61,10 +67,7 @@ impl <META: ByteSerializable>Structure<META> {
         Structure { io, super_block, block_map, inode_table }
     }
 
-    pub fn mount<D: DeviceDriver + 'static>(drive: D) -> Structure<META> {
-        let default_block_size = drive.get_sector_size();
-        let mut io = IO::new(drive, default_block_size);
-
+    pub fn mount(mut io: IO) -> Structure<META> {
         match SuperBlock::read(&mut io) {
             Some(super_block) => {
                 io.set_block_size(super_block.block_size);
@@ -74,6 +77,14 @@ impl <META: ByteSerializable>Structure<META> {
             }
             None => panic!("No superblock found"),
         }
+    }
+
+    pub fn set_root_inode(&mut self, inode: &mut Inode<META>) {
+        self.super_block.set_root_inode(&mut self.io, inode.id.unwrap());
+    }
+
+    pub fn get_root_inode(&self) -> Inode<META> {
+        self.inode_table.read_inode(&self.io, self.super_block.root_inode)
     }
 
     pub fn create_inode(&mut self, meta: META) -> Inode<META> {

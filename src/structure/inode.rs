@@ -2,6 +2,7 @@ use std::mem::size_of;
 use crate::consts::{BlockPointer, DIRECT_POINTERS};
 use crate::consts::DirectPointers;
 use crate::structure::Structure;
+use crate::util::serializable::{ByteSerializable, KnownSize};
 
 const DATA_SIZE: usize = 96;
 const NULL_POINTER: BlockPointer = 0;
@@ -9,14 +10,9 @@ const NULL_POINTER: BlockPointer = 0;
 
 pub type INODE_ID = u64;
 
-pub trait ByteSerializable {
-    fn to_bytes(&self) -> Vec<u8>;
-    fn from_bytes(bytes: &[u8]) -> Self;
-}
-
 // TODO: add metadata support
 // TODO: probably doesn't need public members
-pub struct Inode<META: ByteSerializable> {
+pub struct Inode<META: ByteSerializable + KnownSize> {
     pub(crate) id: Option<INODE_ID>,
     pub(crate) pointers: DirectPointers,
     pub(crate) size: u64,
@@ -25,7 +21,7 @@ pub struct Inode<META: ByteSerializable> {
     pub(crate) allocated_size: u64,
 }
 
-impl <META: ByteSerializable>Inode<META> {
+impl <META: ByteSerializable + KnownSize>Inode<META> {
     pub fn new(meta: META) -> Inode<META> {
         Inode { id: None, pointers: [NULL_POINTER; 12], size: 0, used_pointers: 0, allocated_size: 0, meta }
     }
@@ -61,7 +57,7 @@ impl <META: ByteSerializable>Inode<META> {
 
     #[inline]
     pub fn size_on_disk() -> usize {
-        size_of::<u64>() + size_of::<DirectPointers>() + size_of::<META>()
+        size_of::<u64>() + size_of::<DirectPointers>() + META::size_on_disk()
     }
 
     // TODO: chunks
@@ -177,13 +173,22 @@ impl <META: ByteSerializable>Inode<META> {
 
 #[cfg(test)]
 mod tests {
-    use crate::structure::inode::{Inode, ByteSerializable};
+    use std::mem::size_of;
+    use crate::structure::inode::Inode;
     use crate::structure::Structure;
     use crate::driver::file_drive::FileDrive;
+    use crate::io::IO;
+    use crate::util::serializable::{ByteSerializable, KnownSize};
 
     #[derive(Debug, PartialEq)]
     struct DummyMeta {
         magic: u32,
+    }
+
+    impl KnownSize for DummyMeta {
+        fn size_on_disk() -> usize {
+            size_of::<u32>()
+        }
     }
 
     impl ByteSerializable for DummyMeta {
@@ -236,7 +241,8 @@ mod tests {
     #[test]
     fn test_inode_data() {
         let drive = FileDrive::new("./test-images/test_inode_data.img", 2048 * 512, 512);
-        let mut structure = Structure::new(drive, 512);
+        let io = IO::new(drive, 512);
+        let mut structure = Structure::new(io, 512);
 
         let mut inode = Inode::new(DummyMeta { magic: 42 });
         let data = vec![0; 512 * 12];
