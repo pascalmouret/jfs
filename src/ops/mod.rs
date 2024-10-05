@@ -3,7 +3,7 @@ use crate::driver::DeviceDriver;
 use crate::io::IO;
 use crate::ops::directory::Directory;
 use crate::ops::meta::{GroupId, Metadata, UserId};
-use crate::structure::inode::INODE_ID;
+use crate::structure::inode::{Inode, INODE_ID};
 use crate::structure::Structure;
 
 mod file;
@@ -57,5 +57,13 @@ impl JourneyFS {
         let parent_inode = self.structure.read_inode(parent);
         let mut parent_directory = Directory::from_inode(parent_inode);
         parent_directory.add_directory(&mut self.structure, name, user_id, group_id, permissions)
+    }
+
+    pub fn get_inode(&self, id: INODE_ID) -> Inode<Metadata> {
+        self.structure.read_inode(id)
+    }
+
+    pub fn write_inode(&mut self, mut inode: Inode<Metadata>) {
+        self.structure.write_inode(&mut inode);
     }
 }
