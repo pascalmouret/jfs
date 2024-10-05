@@ -1,4 +1,4 @@
-use crate::ops::meta::{InodeType, Metadata};
+use crate::ops::meta::{GroupId, InodeType, Metadata, UserId};
 use crate::structure::inode::{Inode};
 use crate::structure::Structure;
 
@@ -7,8 +7,8 @@ pub struct File {
 }
 
 impl File {
-    pub fn new(structure: &mut Structure<Metadata>, permissions: u16) -> File {
-        let meta = Metadata::new(InodeType::File, permissions, 1, 0);
+    pub fn new(structure: &mut Structure<Metadata>, user_id: UserId, group_id: GroupId, permissions: u16) -> File {
+        let meta = Metadata::new(InodeType::File, user_id, group_id, permissions, 1, 0);
         let inode = structure.create_inode(meta);
         File {
             inode,

@@ -7,6 +7,7 @@ use crate::driver::file_drive::FileDrive;
 use crate::ops::JourneyFS;
 use crate::structure::inode::{Inode, INODE_ID};
 use crate::ops::meta::{InodeType, Metadata};
+use crate::util::mode::{ModeBits, ModeBitsHelper};
 
 struct FuseDriver {
     journey_fs: JourneyFS,
@@ -15,7 +16,7 @@ struct FuseDriver {
 impl Filesystem for FuseDriver {
     fn init(&mut self, _req: &Request<'_>, _config: &mut fuser::KernelConfig) -> Result<(), c_int> {
         let device = FileDrive::new("./test-images/test_drive.img", 20 * 1024 * 1024, 512);
-        self.journey_fs = JourneyFS::new(device, 512);
+        self.journey_fs = JourneyFS::new(device, _req.uid(), _req.gid(), 512);
         Ok(())
     }
 
@@ -24,11 +25,13 @@ impl Filesystem for FuseDriver {
         _req: &Request<'_>,
         parent: INODE_ID,
         name: &OsStr,
-        mode: u32,
+        mode: ModeBits,
         umask: u32,
         reply: ReplyEntry,
     ) {
-        let directory = self.journey_fs.mkdir(parent, &name.try_into().unwrap(), mode as u16);
+        // TODO: apply umask if necessary
+        let permissions = mode.get_permissions();
+        let directory = self.journey_fs.mkdir(parent, &name.try_into().unwrap(), _req.uid(), _req.gid(), permissions);
         reply.entry(&Duration::new(100, 0), &self.inode_to_fileattr(directory.inode), 0);
     }
 }

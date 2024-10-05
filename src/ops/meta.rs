@@ -6,6 +6,9 @@ pub enum InodeType {
     Directory,
 }
 
+pub type UserId = u32;
+pub type GroupId = u32;
+
 pub struct Metadata {
     pub inode_type: InodeType,
     pub created_at: SystemTime,
@@ -14,14 +17,21 @@ pub struct Metadata {
     pub accessed_at: SystemTime,
     pub permissions: u16,
     pub nlinks: u32, // what is this?
-    pub user_id: u32,
-    pub group_id: u32,
+    pub user_id: UserId,
+    pub group_id: GroupId,
     pub rdev: u32, // what is this?
     pub flags: u32,
 }
 
 impl Metadata {
-    pub fn new(inode_type: InodeType, permissions: u16, nlinks: u32, flags: u32) -> Metadata {
+    pub fn new(
+        inode_type: InodeType,
+        user_id: UserId,
+        group_id: GroupId,
+        permissions: u16,
+        nlinks: u32,
+        flags: u32,
+    ) -> Metadata {
         let now = SystemTime::now();
 
         Metadata {
@@ -32,8 +42,8 @@ impl Metadata {
             accessed_at: now,
             permissions,
             nlinks,
-            user_id: 0,
-            group_id: 0,
+            user_id,
+            group_id,
             rdev: 0,
             flags,
         }

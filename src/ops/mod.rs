@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use crate::driver::DeviceDriver;
 use crate::io::IO;
 use crate::ops::directory::Directory;
-use crate::ops::meta::Metadata;
+use crate::ops::meta::{GroupId, Metadata, UserId};
 use crate::structure::inode::INODE_ID;
 use crate::structure::Structure;
 
@@ -16,7 +16,13 @@ pub struct JourneyFS {
 }
 
 impl JourneyFS {
-    pub fn new<D: DeviceDriver + 'static>(device: D, block_size: usize) -> JourneyFS {
+    // TODO: "new" should probably not mount existing filesystems
+    pub fn new<D: DeviceDriver + 'static>(
+        device: D,
+        user_id: UserId,
+        group_id: GroupId,
+        block_size: usize,
+    ) -> JourneyFS {
         let mut io = IO::new(device, block_size);
 
         if Structure::<Metadata>::is_initialized(&mut io) {
@@ -28,7 +34,7 @@ impl JourneyFS {
             }
         } else {
             let mut structure = Structure::new(io, block_size);
-            let root = Directory::new(&mut structure, 0o755);
+            let root = Directory::new(&mut structure, user_id, group_id, 0o755);
             JourneyFS {
                 structure,
                 root,
@@ -40,9 +46,16 @@ impl JourneyFS {
         self.structure.get_block_size()
     }
 
-    pub fn mkdir(&mut self, parent: INODE_ID, name: &OsString, permissions: u16) -> Directory {
+    pub fn mkdir(
+        &mut self,
+        parent: INODE_ID,
+        name: &OsString,
+        user_id: UserId,
+        group_id: GroupId,
+        permissions: u16,
+    ) -> Directory {
         let parent_inode = self.structure.read_inode(parent);
         let mut parent_directory = Directory::from_inode(parent_inode);
-        parent_directory.add_directory(&mut self.structure, name, permissions)
+        parent_directory.add_directory(&mut self.structure, name, user_id, group_id, permissions)
     }
 }
