@@ -1,6 +1,6 @@
-use std::ops::Range;
 use crate::consts::BlockPointer;
 use crate::driver::DeviceDriver;
+use std::ops::Range;
 
 pub(crate) struct IO {
     pub drive: Box<dyn DeviceDriver>,
@@ -10,8 +10,14 @@ pub(crate) struct IO {
 
 impl IO {
     pub(crate) fn new<D: DeviceDriver + 'static>(drive: D, block_size: usize) -> IO {
-        let block_count = drive.get_size() / block_size as u64;
-        IO { drive: Box::new(drive), block_size, block_count }
+        let block_count =
+            (drive.get_sector_size() as u64 * drive.get_sector_count() as u64) / block_size as u64;
+
+        IO {
+            drive: Box::new(drive),
+            block_size,
+            block_count,
+        }
     }
 
     pub(crate) fn get_block_size(&self) -> usize {
@@ -24,7 +30,9 @@ impl IO {
 
     pub(crate) fn set_block_size(&mut self, block_size: usize) {
         self.block_size = block_size;
-        self.block_count = self.drive.get_size() / block_size as u64;
+        self.block_count = (self.drive.get_sector_size() as u64
+            * self.drive.get_sector_count() as u64)
+            / block_size as u64;
     }
 
     pub(crate) fn get_sector_size(&self) -> usize {
@@ -54,7 +62,8 @@ impl IO {
             for i in start..end {
                 let offset = (i - start) as usize * self.drive.get_sector_size();
                 let limit = offset + self.drive.get_sector_size();
-                self.drive.write_sector(i, &block[(offset..limit) as Range<usize>].to_vec())
+                self.drive
+                    .write_sector(i, &block[(offset..limit) as Range<usize>].to_vec())
             }
         }
     }

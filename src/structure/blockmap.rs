@@ -1,5 +1,4 @@
 use crate::consts::BlockPointer;
-use crate::driver::DeviceDriver;
 use crate::io::IO;
 
 pub struct BlockMap {
@@ -12,7 +11,11 @@ impl BlockMap {
     pub fn new(first_block: BlockPointer, block_count: u64, block_size: usize) -> BlockMap {
         let data = BlockMap::create_data(block_count, block_size);
         let last_block = first_block + data.len() as u64 / block_size as u64;
-        let mut map = BlockMap { first_block, last_block, data };
+        let mut map = BlockMap {
+            first_block,
+            last_block,
+            data,
+        };
         for i in 0..last_block + 1 {
             map.mark_used_mem(i)
         }
@@ -28,7 +31,11 @@ impl BlockMap {
             let block = io.read_block(i);
             data[offset..limit].copy_from_slice(&block);
         }
-        BlockMap { first_block: index, last_block, data }
+        BlockMap {
+            first_block: index,
+            last_block,
+            data,
+        }
     }
 
     fn create_data(block_count: u64, block_size: usize) -> Vec<u8> {

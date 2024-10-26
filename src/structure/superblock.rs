@@ -1,7 +1,6 @@
 use crate::consts::SUPERBLOCK_SIZE;
-use crate::driver::DeviceDriver;
 use crate::io::IO;
-use crate::structure::inode::INODE_ID;
+use crate::structure::inode::InodeId;
 
 const MAGIC: u32 = 0xdeadbeef;
 
@@ -11,12 +10,18 @@ pub struct SuperBlock {
     pub block_size: usize,
     pub block_count: u64,
     pub inode_count: u64,
-    pub root_inode: INODE_ID,
+    pub root_inode: InodeId,
 }
 
 impl SuperBlock {
     pub fn new(block_size: usize, block_count: u64) -> SuperBlock {
-        SuperBlock { magic: MAGIC, block_size, block_count, inode_count: 0, root_inode: 0 }
+        SuperBlock {
+            magic: MAGIC,
+            block_size,
+            block_count,
+            inode_count: 0,
+            root_inode: 0,
+        }
     }
 
     pub fn set_inode_count(&mut self, io: &mut IO, inode_count: u64) {
@@ -24,7 +29,7 @@ impl SuperBlock {
         self.write(io);
     }
 
-    pub fn set_root_inode(&mut self, io: &mut IO, root_inode: INODE_ID) {
+    pub fn set_root_inode(&mut self, io: &mut IO, root_inode: InodeId) {
         self.root_inode = root_inode;
         self.write(io);
     }
@@ -50,10 +55,25 @@ impl SuperBlock {
     fn from_buffer(buffer: &Vec<u8>) -> SuperBlock {
         let magic = u32::from_le_bytes([buffer[0], buffer[1], buffer[2], buffer[3]]);
         let block_size = u32::from_le_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]) as usize;
-        let block_count = u64::from_le_bytes([buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15]]);
-        let inode_count = u64::from_le_bytes([buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23]]);
-        let root_node = u64::from_le_bytes([buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30], buffer[31]]);
-        SuperBlock { magic, block_size, block_count, inode_count, root_inode: root_node }
+        let block_count = u64::from_le_bytes([
+            buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14],
+            buffer[15],
+        ]);
+        let inode_count = u64::from_le_bytes([
+            buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22],
+            buffer[23],
+        ]);
+        let root_node = u64::from_le_bytes([
+            buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29], buffer[30],
+            buffer[31],
+        ]);
+        SuperBlock {
+            magic,
+            block_size,
+            block_count,
+            inode_count,
+            root_inode: root_node,
+        }
     }
 
     fn to_buffer(&self) -> Vec<u8> {

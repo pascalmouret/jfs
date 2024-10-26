@@ -1,19 +1,17 @@
-use std::mem::size_of;
-use crate::consts::{BlockPointer, DIRECT_POINTERS};
 use crate::consts::DirectPointers;
+use crate::consts::{BlockPointer, DIRECT_POINTERS};
 use crate::structure::Structure;
 use crate::util::serializable::{ByteSerializable, KnownSize};
+use std::mem::size_of;
 
 const DATA_SIZE: usize = 96;
 const NULL_POINTER: BlockPointer = 0;
 
+pub type InodeId = u64;
 
-pub type INODE_ID = u64;
-
-// TODO: add metadata support
 // TODO: probably doesn't need public members
 pub struct Inode<META: ByteSerializable + KnownSize> {
-    pub(crate) id: Option<INODE_ID>,
+    pub(crate) id: Option<InodeId>,
     pub(crate) pointers: DirectPointers,
     pub(crate) size: u64,
     pub(crate) meta: META,
@@ -21,12 +19,19 @@ pub struct Inode<META: ByteSerializable + KnownSize> {
     pub(crate) allocated_size: u64,
 }
 
-impl <META: ByteSerializable + KnownSize>Inode<META> {
+impl<META: ByteSerializable + KnownSize> Inode<META> {
     pub fn new(meta: META) -> Inode<META> {
-        Inode { id: None, pointers: [NULL_POINTER; 12], size: 0, used_pointers: 0, allocated_size: 0, meta }
+        Inode {
+            id: None,
+            pointers: [NULL_POINTER; 12],
+            size: 0,
+            used_pointers: 0,
+            allocated_size: 0,
+            meta,
+        }
     }
 
-    pub fn set_id(&mut self, id: INODE_ID) {
+    pub fn set_id(&mut self, id: InodeId) {
         self.id = Some(id);
     }
 
@@ -38,8 +43,8 @@ impl <META: ByteSerializable + KnownSize>Inode<META> {
         bytes
     }
 
-    pub fn from_bytes(id: INODE_ID, bytes: &Vec<u8>, block_size: usize) -> Self {
-        let (size_bytes, remainder ) = bytes.as_slice().split_at(size_of::<u64>());
+    pub fn from_bytes(id: InodeId, bytes: &Vec<u8>, block_size: usize) -> Self {
+        let (size_bytes, remainder) = bytes.as_slice().split_at(size_of::<u64>());
         let (pointer_bytes, meta_bytes) = remainder.split_at(DATA_SIZE);
         let size = u64::from_le_bytes(size_bytes.try_into().unwrap());
         let pointers = Inode::<META>::bytes_to_pointers(pointer_bytes);
@@ -51,7 +56,10 @@ impl <META: ByteSerializable + KnownSize>Inode<META> {
             size,
             pointers,
             used_pointers: Inode::<META>::count_used_pointers(&pointers),
-            allocated_size: Inode::<META>::calculate_allocated_size(Inode::<META>::count_used_pointers(&pointers), block_size)
+            allocated_size: Inode::<META>::calculate_allocated_size(
+                Inode::<META>::count_used_pointers(&pointers),
+                block_size,
+            ),
         }
     }
 
@@ -107,7 +115,7 @@ impl <META: ByteSerializable + KnownSize>Inode<META> {
 
     fn bytes_to_pointers(data: &[u8]) -> DirectPointers {
         let mut pointers = [NULL_POINTER; 12];
-        let mut data = data;
+        let data = data;
         for i in 0..DIRECT_POINTERS {
             let mut bytes = [0u8; 8];
             bytes.copy_from_slice(&data[i * 8..8 + i * 8]);
@@ -126,7 +134,10 @@ impl <META: ByteSerializable + KnownSize>Inode<META> {
 
     fn ensure_size(&mut self, structure: &mut Structure<META>, new_size: u64) {
         if new_size > (structure.get_block_size() as u64 * DIRECT_POINTERS as u64) {
-            panic!("File cannot be larger than {} bytes", structure.get_block_size() * DIRECT_POINTERS);
+            panic!(
+                "File cannot be larger than {} bytes",
+                structure.get_block_size() * DIRECT_POINTERS
+            );
         }
 
         let mut target_pointer_count = new_size / structure.get_block_size() as u64;
@@ -158,7 +169,8 @@ impl <META: ByteSerializable + KnownSize>Inode<META> {
         let block = structure.allocate_block().unwrap();
         self.pointers[self.used_pointers] = block;
         self.used_pointers += 1;
-        self.allocated_size = Inode::<META>::calculate_allocated_size(self.used_pointers, structure.get_block_size());
+        self.allocated_size =
+            Inode::<META>::calculate_allocated_size(self.used_pointers, structure.get_block_size());
         block
     }
 
@@ -167,18 +179,19 @@ impl <META: ByteSerializable + KnownSize>Inode<META> {
         structure.block_map.mark_free(&mut structure.io, block);
         self.pointers[self.used_pointers - 1] = NULL_POINTER;
         self.used_pointers -= 1;
-        self.allocated_size = Inode::<META>::calculate_allocated_size(self.used_pointers, structure.get_block_size());
+        self.allocated_size =
+            Inode::<META>::calculate_allocated_size(self.used_pointers, structure.get_block_size());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::mem::size_of;
-    use crate::structure::inode::Inode;
-    use crate::structure::Structure;
     use crate::driver::file_drive::FileDrive;
     use crate::io::IO;
+    use crate::structure::inode::Inode;
+    use crate::structure::Structure;
     use crate::util::serializable::{ByteSerializable, KnownSize};
+    use std::mem::size_of;
 
     #[derive(Debug, PartialEq)]
     struct DummyMeta {
@@ -235,7 +248,10 @@ mod tests {
         assert_eq!(new_inode.used_pointers, 12);
         assert_eq!(new_inode.meta, DummyMeta { magic: 42 });
         assert_eq!(new_inode.pointers, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-        assert_eq!(new_inode.allocated_size, Inode::<DummyMeta>::calculate_allocated_size(new_inode.used_pointers, 512));
+        assert_eq!(
+            new_inode.allocated_size,
+            Inode::<DummyMeta>::calculate_allocated_size(new_inode.used_pointers, 512)
+        );
     }
 
     #[test]

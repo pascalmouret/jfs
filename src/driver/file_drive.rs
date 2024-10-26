@@ -1,6 +1,6 @@
+use crate::driver::DeviceDriver;
 use std::fs::File;
 use std::os::unix::fs::FileExt;
-use crate::driver::DeviceDriver;
 
 pub struct FileDrive {
     file: File,
@@ -12,21 +12,25 @@ impl FileDrive {
     pub fn new(name: &str, bytes: u64, sector_size: usize) -> FileDrive {
         let file = File::create_new(name).unwrap();
         file.set_len(bytes).unwrap();
-        FileDrive { file, bytes, sector_size }
+        FileDrive {
+            file,
+            bytes,
+            sector_size,
+        }
     }
 
     pub fn open(name: &str, sector_size: usize) -> FileDrive {
         let file = File::open(name).unwrap();
         let bytes = file.metadata().unwrap().len();
-        FileDrive { file, bytes, sector_size }
+        FileDrive {
+            file,
+            bytes,
+            sector_size,
+        }
     }
 }
 
 impl DeviceDriver for FileDrive {
-    fn get_size(&self) -> u64 {
-        self.bytes
-    }
-
     fn get_sector_count(&self) -> u64 {
         self.bytes / self.sector_size as u64
     }
@@ -37,22 +41,30 @@ impl DeviceDriver for FileDrive {
 
     fn read_sector(&self, index: u64) -> Vec<u8> {
         let mut buffer = vec![0; self.sector_size];
-        self.file.read_at(&mut buffer, index * self.sector_size as u64).unwrap();
+        self.file
+            .read_at(&mut buffer, index * self.sector_size as u64)
+            .unwrap();
         buffer
     }
 
     fn write_sector(&mut self, index: u64, sector: &Vec<u8>) {
         if sector.len() != self.sector_size {
-            panic!("Sector size mismatch - expected {}, got {}", self.sector_size, sector.len());
+            panic!(
+                "Sector size mismatch - expected {}, got {}",
+                self.sector_size,
+                sector.len()
+            );
         }
-        self.file.write_at(&sector, index * self.sector_size as u64).unwrap();
+        self.file
+            .write_at(&sector, index * self.sector_size as u64)
+            .unwrap();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::driver::DeviceDriver;
     use crate::driver::file_drive::FileDrive;
+    use crate::driver::DeviceDriver;
 
     #[test]
     fn test_hard_drive() {

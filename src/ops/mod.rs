@@ -2,7 +2,7 @@ use crate::driver::DeviceDriver;
 use crate::io::IO;
 use crate::ops::directory::Directory;
 use crate::ops::meta::{GroupId, Metadata, UserId};
-use crate::structure::inode::{Inode, INODE_ID};
+use crate::structure::inode::{Inode, InodeId};
 use crate::structure::Structure;
 use crate::util::error::Error;
 use std::ffi::OsString;
@@ -43,7 +43,7 @@ impl JourneyFS {
 
     pub fn mkdir(
         &mut self,
-        parent: INODE_ID,
+        parent: InodeId,
         name: &OsString,
         user_id: UserId,
         group_id: GroupId,
@@ -60,7 +60,7 @@ impl JourneyFS {
         ))
     }
 
-    pub fn get_inode(&self, id: INODE_ID) -> Result<Inode<Metadata>, Error> {
+    pub fn get_inode(&self, id: InodeId) -> Result<Inode<Metadata>, Error> {
         Ok(self.structure.read_inode(id))
     }
 

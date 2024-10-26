@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime};
 use crate::driver::file_drive::FileDrive;
 use crate::ops::meta::{GroupId, InodeType, Metadata, UserId};
 use crate::ops::JourneyFS;
-use crate::structure::inode::{Inode, INODE_ID};
+use crate::structure::inode::{Inode, InodeId};
 use crate::util::mode::{ModeBits, ModeBitsHelper};
 
 const TTL: Duration = Duration::new(100, 0);
@@ -26,13 +26,14 @@ impl Filesystem for FuseDriver {
 
     fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyAttr) {
         // TODO: really need error handling
-        let inode = self.journey_fs.get_inode(ino as INODE_ID);
+        let inode = self.journey_fs.get_inode(ino as InodeId);
         match inode {
             Ok(inode) => reply.attr(&TTL, &self.inode_to_fileattr(inode)),
             Err(error) => reply.error(error.error_num),
         }
     }
 
+    // TODO: figure out what the other times do
     fn setattr(
         &mut self,
         _req: &Request<'_>,
@@ -41,27 +42,26 @@ impl Filesystem for FuseDriver {
         uid: Option<UserId>,
         gid: Option<GroupId>,
         size: Option<u64>,
-        _atime: Option<TimeOrNow>,
-        _mtime: Option<TimeOrNow>,
-        _ctime: Option<SystemTime>,
-        fh: Option<u64>,
+        atime: Option<TimeOrNow>,
+        mtime: Option<TimeOrNow>,
+        ctime: Option<SystemTime>,
+        _fh: Option<u64>,
         _crtime: Option<SystemTime>,
         _chgtime: Option<SystemTime>,
         _bkuptime: Option<SystemTime>,
         flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        let result = self.journey_fs.get_inode(ino as INODE_ID);
+        let result = self.journey_fs.get_inode(ino as InodeId);
 
         match result {
             Err(error) => reply.error(error.error_num),
             Ok(mut inode) => {
                 // TODO: resize
-                if let Some(size) = size {
+                if let Some(_) = size {
                     reply.error(libc::EOPNOTSUPP);
                     return;
                 }
-                // TODO: what is fh?
 
                 if let Some(mode) = mode {
                     // TODO: other mode stuff
@@ -76,14 +76,14 @@ impl Filesystem for FuseDriver {
                 if let Some(flags) = flags {
                     inode.meta.flags = flags;
                 }
-                if let Some(_atime) = _atime {
-                    inode.meta.accessed_at = FuseDriver::time_or_now_to_system_time(_atime);
+                if let Some(atime) = atime {
+                    inode.meta.accessed_at = FuseDriver::time_or_now_to_system_time(atime);
                 }
-                if let Some(_mtime) = _mtime {
-                    inode.meta.modified_at = FuseDriver::time_or_now_to_system_time(_mtime);
+                if let Some(mtime) = mtime {
+                    inode.meta.modified_at = FuseDriver::time_or_now_to_system_time(mtime);
                 }
-                if let Some(_ctime) = _ctime {
-                    inode.meta.changed_at = _ctime;
+                if let Some(ctime) = ctime {
+                    inode.meta.changed_at = ctime;
                 }
 
                 match self.journey_fs.write_inode(&mut inode) {
@@ -97,7 +97,7 @@ impl Filesystem for FuseDriver {
     fn mkdir(
         &mut self,
         _req: &Request<'_>,
-        parent: INODE_ID,
+        parent: InodeId,
         name: &OsStr,
         mode: ModeBits,
         umask: u32,

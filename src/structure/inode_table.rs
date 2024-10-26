@@ -6,8 +6,6 @@ use crate::structure::inode::Inode;
 use crate::util::serializable::{ByteSerializable, KnownSize};
 use std::marker::PhantomData;
 
-const EMPTY_POINTERS: DirectPointers = [0 as BlockPointer; DIRECT_POINTERS];
-
 pub struct InodeTable<META: ByteSerializable + KnownSize> {
     map: Vec<u8>,
     map_index: u64,
@@ -64,10 +62,10 @@ impl<META: ByteSerializable + KnownSize> InodeTable<META> {
         let inode_block = self.inode_block(index, io.get_block_size());
         let offset = Self::inode_offset(index, io.get_block_size());
 
-        let mut block = io.read_block(inode_block);
+        let block = io.read_block(inode_block);
         let mut buffer = vec![0u8; Inode::<META>::size_on_disk()];
         buffer.copy_from_slice(&block[offset..offset + Inode::<META>::size_on_disk()]);
-        let mut inode = Inode::<META>::from_bytes(index, &buffer, io.get_block_size());
+        let inode = Inode::<META>::from_bytes(index, &buffer, io.get_block_size());
         inode
     }
 
