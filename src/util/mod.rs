@@ -1,3 +1,4 @@
+pub mod error;
 pub mod format;
-pub mod serializable;
 pub mod mode;
+pub mod serializable;
