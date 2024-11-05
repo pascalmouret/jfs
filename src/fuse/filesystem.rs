@@ -1,39 +1,59 @@
+use core::panic;
 use fuser::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyEntry, Request, TimeOrNow};
 use libc::c_int;
 use std::ffi::OsStr;
+use std::fs::File;
 use std::time::{Duration, SystemTime};
 
 use crate::driver::file_drive::FileDrive;
 use crate::ops::meta::{GroupId, InodeType, Metadata, UserId};
 use crate::ops::JourneyFS;
 use crate::structure::inode::{Inode, InodeId};
+use crate::util::error::Error;
 use crate::util::mode::{ModeBits, ModeBitsHelper};
 
 const TTL: Duration = Duration::new(100, 0);
 
 struct FuseDriver {
-    journey_fs: JourneyFS,
+    size: u64,
+    journey_fs: Option<JourneyFS>,
+    mount_path: String,
+    sector_size: usize,
+    block_size: usize,
 }
 
 impl Filesystem for FuseDriver {
     fn init(&mut self, _req: &Request<'_>, _config: &mut fuser::KernelConfig) -> Result<(), c_int> {
-        let device = FileDrive::new("./test-images/test_drive.img", 20 * 1024 * 1024, 512);
-        JourneyFS::new(device, _req.uid(), _req.gid(), 512)
-            // TODO: appropriate error
-            .map_err(|e| e.error_num)
-            .map(|_| ())
+        if self.journey_fs.is_some() {
+            panic!("init should only be called once")
+        }
+
+        let drive = match File::open(self.mount_path.as_str()) {
+            Ok(file) => FileDrive::open(file, self.sector_size),
+            Err(_) => FileDrive::new(self.mount_path.as_str(), self.size, self.sector_size),
+        };
+
+        // TODO: should error if an already existing file does not match our parameters
+
+        match JourneyFS::new(drive, _req.uid(), _req.gid(), self.block_size) {
+            Ok(fs) => {
+                self.journey_fs = Some(fs);
+                Ok(())
+            }
+            Err(error) => Err(error.error_num),
+        }
     }
 
     fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyAttr) {
         // TODO: really need error handling
-        let inode = self.journey_fs.get_inode(ino as InodeId);
+        let inode = self.get_fs_ref().get_inode(ino as InodeId);
         match inode {
             Ok(inode) => reply.attr(&TTL, &self.inode_to_fileattr(inode)),
             Err(error) => reply.error(error.error_num),
         }
     }
 
-    // TODO: figure out what the other times do
+    // TODO: figure out what the unused arguments do
     fn setattr(
         &mut self,
         _req: &Request<'_>,
@@ -52,7 +72,7 @@ impl Filesystem for FuseDriver {
         flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        let result = self.journey_fs.get_inode(ino as InodeId);
+        let result = self.get_fs_ref().get_inode(ino as InodeId);
 
         match result {
             Err(error) => reply.error(error.error_num),
@@ -86,7 +106,7 @@ impl Filesystem for FuseDriver {
                     inode.meta.changed_at = ctime;
                 }
 
-                match self.journey_fs.write_inode(&mut inode) {
+                match self.get_mut_fs_ref().write_inode(&mut inode) {
                     Ok(_) => reply.attr(&TTL, &FuseDriver::inode_to_fileattr(&self, inode)),
                     Err(error) => reply.error(error.error_num),
                 }
@@ -96,20 +116,20 @@ impl Filesystem for FuseDriver {
 
     fn mkdir(
         &mut self,
-        _req: &Request<'_>,
+        req: &Request<'_>,
         parent: InodeId,
         name: &OsStr,
         mode: ModeBits,
-        umask: u32,
+        _umask: u32,
         reply: ReplyEntry,
     ) {
         // TODO: apply umask if necessary
         let permissions = mode.get_permissions();
-        let result = self.journey_fs.mkdir(
+        let result = self.get_mut_fs_ref().mkdir(
             parent,
             &name.try_into().unwrap(),
-            _req.uid(),
-            _req.gid(),
+            req.uid(),
+            req.gid(),
             permissions,
         );
 
@@ -127,7 +147,33 @@ impl Filesystem for FuseDriver {
 }
 
 impl FuseDriver {
-    // TODO: implement into
+    fn new(
+        mount_path: &str,
+        size: u64,
+        block_size: usize,
+        sector_size: usize,
+    ) -> Result<FuseDriver, Error> {
+        return Ok(FuseDriver {
+            mount_path: String::from(mount_path),
+            size,
+            journey_fs: None,
+            block_size,
+            sector_size,
+        });
+    }
+
+    fn get_fs_ref(&self) -> &JourneyFS {
+        self.journey_fs
+            .as_ref()
+            .expect("init should have been called")
+    }
+
+    fn get_mut_fs_ref(&mut self) -> &mut JourneyFS {
+        self.journey_fs
+            .as_mut()
+            .expect("init should have been called")
+    }
+
     fn inode_to_fileattr(&self, inode: Inode<Metadata>) -> FileAttr {
         FileAttr {
             ino: inode.id.unwrap() as u64,
@@ -149,11 +195,10 @@ impl FuseDriver {
             flags: inode.meta.flags,
             // If the block size is not know something is seriously wrong and we
             // should panic
-            blksize: self.journey_fs.get_block_size().unwrap() as u32,
+            blksize: self.get_fs_ref().get_block_size().unwrap() as u32,
         }
     }
 
-    // TODO: implement into
     fn fileattr_to_metadata(&self, attr: FileAttr) -> Metadata {
         Metadata {
             inode_type: match attr.kind {

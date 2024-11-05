@@ -19,8 +19,17 @@ impl FileDrive {
         }
     }
 
-    pub fn open(name: &str, sector_size: usize) -> FileDrive {
-        let file = File::open(name).unwrap();
+    pub fn open(file: File, sector_size: usize) -> FileDrive {
+        let bytes = file.metadata().unwrap().len();
+        FileDrive {
+            file,
+            bytes,
+            sector_size,
+        }
+    }
+
+    pub fn open_path(path: &str, sector_size: usize) -> FileDrive {
+        let file = File::open(path).unwrap();
         let bytes = file.metadata().unwrap().len();
         FileDrive {
             file,
